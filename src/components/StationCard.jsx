@@ -1,5 +1,6 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import AvailabilityButton from './availability/AvailabilityButton';
 import { FiMapPin, FiThermometer, FiDroplet, FiCloudRain, FiTrendingDown, FiWind, FiEye } from 'react-icons/fi';
 
 function Metric({ icon: Icon, label, value, unit }) {
@@ -13,8 +14,7 @@ function Metric({ icon: Icon, label, value, unit }) {
     );
 }
 
-export default function StationCard({ id, name, metrics }) {
-    const navigate = useNavigate();
+export default function StationCard({ id, name, metrics, imageSrc, onOpenAvailability }) {
     const mapped = metrics
         ? {
             temperature: { value: metrics.temperature_c ?? '—', unit: '°C' },
@@ -27,35 +27,40 @@ export default function StationCard({ id, name, metrics }) {
         : null;
 
     return (
-        <button
-            className="card"
-            onClick={() => navigate(`/station/${id}`)}
-            style={{ textAlign: 'left', width: '100%', cursor: 'pointer', border: '1px solid transparent' }}
-            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = '0 12px 28px rgba(37, 99, 235, 0.15)')}
-            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.06)')}
-            aria-label={`${name} station card`}
-        >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <FiMapPin size={16} color="var(--brand-600)" aria-hidden="true" />
-                <strong>{name}</strong>
+        <Link to={`/station/${id}`} className="card station-card" aria-label={`View ${name} station`} style={{ display: 'block', textDecoration: 'none', color: 'inherit', border: '1px solid var(--panel-border)' }}>
+            <div className="card-banner">
+                {imageSrc ? (
+                    <img src={imageSrc} alt={`${name} skyline (mock)`} />
+                ) : null}
+                <div className="overlay">
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <FiMapPin size={16} />
+                        <span>{name}</span>
+                    </span>
+                </div>
+                <div style={{ position: 'absolute', right: 10, top: 10 }}>
+                    <AvailabilityButton onOpen={(e) => { e.preventDefault?.(); onOpenAvailability?.(id); }} />
+                </div>
             </div>
-            {mapped ? (
-                <div className="grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-                    <Metric icon={FiThermometer} label="Temperature" value={mapped.temperature.value} unit={mapped.temperature.unit} />
-                    <Metric icon={FiDroplet} label="Humidity" value={mapped.humidity.value} unit={mapped.humidity.unit} />
-                    <Metric icon={FiCloudRain} label="Rainfall" value={mapped.rainfall.value} unit={mapped.rainfall.unit} />
-                    <Metric icon={FiTrendingDown} label="Pressure" value={mapped.pressure.value} unit={mapped.pressure.unit} />
-                    <Metric icon={FiWind} label="Wind" value={mapped.windspeed.value} unit={mapped.windspeed.unit} />
-                    <Metric icon={FiEye} label="Visibility" value={mapped.visibility.value} unit={mapped.visibility.unit} />
-                </div>
-            ) : (
-                <div className="grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-                    {Array.from({ length: 6 }).map((_, i) => (
-                        <div key={i} className="skeleton" style={{ height: 32 }} aria-hidden="true" />
-                    ))}
-                </div>
-            )}
-        </button>
+            <div style={{ paddingTop: 10 }}>
+                {mapped ? (
+                    <div className="grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                        <Metric icon={FiThermometer} label="Temperature" value={mapped.temperature.value} unit={mapped.temperature.unit} />
+                        <Metric icon={FiDroplet} label="Humidity" value={mapped.humidity.value} unit={mapped.humidity.unit} />
+                        <Metric icon={FiCloudRain} label="Rainfall" value={mapped.rainfall.value} unit={mapped.rainfall.unit} />
+                        <Metric icon={FiTrendingDown} label="Pressure" value={mapped.pressure.value} unit={mapped.pressure.unit} />
+                        <Metric icon={FiWind} label="Wind" value={mapped.windspeed.value} unit={mapped.windspeed.unit} />
+                        <Metric icon={FiEye} label="Visibility" value={mapped.visibility.value} unit={mapped.visibility.unit} />
+                    </div>
+                ) : (
+                    <div className="grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <div key={i} className="skeleton" style={{ height: 32 }} aria-hidden="true" />
+                        ))}
+                    </div>
+                )}
+            </div>
+        </Link>
     );
 }
 

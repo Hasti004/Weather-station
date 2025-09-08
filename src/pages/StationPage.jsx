@@ -10,6 +10,8 @@ import ChartPanel from '../components/ChartPanel';
 import TemperatureChart from '../components/TemperatureChart';
 import RainfallChart from '../components/RainfallChart';
 import HumidityChart from '../components/HumidityChart';
+import AvailabilityButton from '../components/availability/AvailabilityButton';
+import AvailabilityModal from '../components/availability/AvailabilityModal';
 import { FiThermometer, FiDroplet, FiCloudRain, FiTrendingDown, FiWind, FiEye } from 'react-icons/fi';
 
 const STATION_NAMES = {
@@ -21,7 +23,8 @@ const STATION_NAMES = {
 export default function StationPage() {
     const { id } = useParams();
     const live = useStationLive(id);
-    const [filter, setFilter] = useState({ mode: 'daily', start: null, end: null, granularity: 'daily' });
+    const [filter, setFilter] = useState({ mode: 'monthly', start: null, end: null, granularity: 'daily' });
+    const [showAvail, setShowAvail] = useState(false);
 
     const resolvedRange = useMemo(() => {
         const now = new Date();
@@ -62,7 +65,10 @@ export default function StationPage() {
             <Navbar lastUpdated={live.lastUpdated} />
             <main className="container">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <h2 style={{ margin: 0 }}>{STATION_NAMES[id] || 'Station'}</h2>
+                    <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {STATION_NAMES[id] || 'Station'}
+                        <AvailabilityButton onOpen={() => setShowAvail(true)} />
+                    </h2>
                     <Link to="/" style={{ color: 'var(--brand-600)', textDecoration: 'none' }}>&larr; All Stations</Link>
                 </div>
                 <TimeFilterToolbar value={filter} onChange={setFilter} />
@@ -124,6 +130,13 @@ export default function StationPage() {
                     </>
                 )}
             </main>
+            {showAvail && (
+                <AvailabilityModal id={id} isOpen={showAvail} onClose={() => setShowAvail(false)} onApplyRange={(start, end) => {
+                    // Apply to charts only
+                    const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+                    setFilter({ mode: 'custom', start, end, granularity: days >= 2 ? 'daily' : 'raw' });
+                }} />
+            )}
         </div>
     );
 }

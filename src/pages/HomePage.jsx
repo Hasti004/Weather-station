@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import StationOverviewGrid from '../components/StationOverviewGrid';
+import AvailabilityModal from '../components/availability/AvailabilityModal';
+import AvailabilityButton from '../components/availability/AvailabilityButton';
 
 async function fetchStation(url) {
     const res = await fetch(url, { cache: 'no-store' });
@@ -24,6 +26,7 @@ export default function HomePage() {
     const [stations, setStations] = useState([]);
     const [lastUpdated, setLastUpdated] = useState(null);
     const [error, setError] = useState(null);
+    const [openFor, setOpenFor] = useState(null);
 
     useEffect(() => {
         let mounted = true;
@@ -68,7 +71,15 @@ export default function HomePage() {
                         ))}
                     </div>
                 ) : (
-                    <StationOverviewGrid stations={stations} />
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                            {/* Optional global availability openers */}
+                        </div>
+                        <StationOverviewGrid stations={stations} onOpenAvailability={(id) => setOpenFor(id)} />
+                        {openFor && (
+                            <AvailabilityModal id={openFor} isOpen={true} onClose={() => setOpenFor(null)} onApplyRange={() => { /* Home does not change filters, just visibility */ }} />
+                        )}
+                    </>
                 )}
             </main>
         </div>
