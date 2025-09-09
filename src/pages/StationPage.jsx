@@ -10,6 +10,13 @@ import ChartPanel from '../components/ChartPanel';
 import TemperatureChart from '../components/TemperatureChart';
 import RainfallChart from '../components/RainfallChart';
 import HumidityChart from '../components/HumidityChart';
+import PressureChart from '../components/charts/PressureChart';
+import WindSpeedChart from '../components/charts/WindSpeedChart';
+import VisibilityChart from '../components/charts/VisibilityChart';
+import WindRoseChart from '../components/charts/WindRoseChart';
+import GraphBuilder from '../components/GraphBuilder/GraphBuilder';
+import { FIELD_META, DEFAULT_X } from '../utils/fields';
+import { buildSeries } from '../utils/aggregate';
 import AvailabilityButton from '../components/availability/AvailabilityButton';
 import AvailabilityModal from '../components/availability/AvailabilityModal';
 import { FiThermometer, FiDroplet, FiCloudRain, FiTrendingDown, FiWind, FiEye } from 'react-icons/fi';
@@ -48,6 +55,12 @@ export default function StationPage() {
     }, [filter]);
 
     const archive = useStationArchive(id, { range: resolvedRange, granularity: filter.granularity });
+    const [graphSel, setGraphSel] = useState({
+        xKey: DEFAULT_X,
+        yKey: 'TempOut(C)',
+        charts: { temperature: true, rainfall: true, humidity: true, pressure: false, windspeed: false, visibility: false, winddir: true },
+        types: { temperature: 'line', rainfall: 'bar', humidity: 'line', pressure: 'line', windspeed: 'line', visibility: 'line' }
+    });
 
     const mapped = live.metrics
         ? {
@@ -109,6 +122,9 @@ export default function StationPage() {
                             </table>
                             <div style={{ fontSize: 12, color: '#64748B', marginTop: 6 }}>Last updated: {live.lastUpdated ? new Date(live.lastUpdated).toLocaleString() : '—'}</div>
                         </div>
+                        <div style={{ marginTop: 12 }}>
+                            <GraphBuilder availableFields={FIELD_META} hasWindDir={Array.isArray(archive.rows) && archive.rows.some(r => Number.isFinite(r.WindDir))} selection={graphSel} onChange={setGraphSel} />
+                        </div>
                         {archive.error ? (
                             <ErrorBanner message={archive.error} />
                         ) : archive.loading || !archive.charts ? (
@@ -118,15 +134,61 @@ export default function StationPage() {
                                 <div style={{ marginTop: 12, marginBottom: 8 }}>
                                     <TimeFilterToolbar value={filter} onChange={setFilter} />
                                 </div>
-                                <ChartPanel title="Temperature" avgLabel="Avg" avgValue={archive.charts.temperature.avg}>
-                                    <TemperatureChart data={archive.charts.temperature} unit="°C" />
-                                </ChartPanel>
-                                <ChartPanel title="Rainfall" avgLabel="Avg" avgValue={archive.charts.rainfall.avg}>
-                                    <RainfallChart data={archive.charts.rainfall} unit="mm" />
-                                </ChartPanel>
-                                <ChartPanel title="Humidity" avgLabel="Avg" avgValue={archive.charts.humidity.avg}>
-                                    <HumidityChart data={archive.charts.humidity} unit="%" />
-                                </ChartPanel>
+                                {graphSel.charts.temperature && (
+                                    <ChartPanel title="Temperature" avgLabel="Avg" avgValue={archive.charts.temperature.avg}>
+                                        <TemperatureChart data={archive.charts.temperature} unit="°C" />
+                                    </ChartPanel>
+                                )}
+                                {graphSel.charts.rainfall && (
+                                    <ChartPanel title="Rainfall" avgLabel="Avg" avgValue={archive.charts.rainfall.avg}>
+                                        <RainfallChart data={archive.charts.rainfall} unit="mm" />
+                                    </ChartPanel>
+                                )}
+                                {graphSel.charts.humidity && (
+                                    <ChartPanel title="Humidity" avgLabel="Avg" avgValue={archive.charts.humidity.avg}>
+                                        <HumidityChart data={archive.charts.humidity} unit="%" />
+                                    </ChartPanel>
+                                )}
+                                {graphSel.charts.pressure && (
+                                    <ChartPanel title="Pressure" avgLabel="Avg" avgValue={buildSeries((archive.rows || []).map(r => ({ dt: r.dt, pressure_hpa: r['Barometer(hPa)'] })), 'day', 'daily', 'pressure_hpa', 'avg').avg}>
+                                        <PressureChart data={buildSeries((archive.rows || []).map(r => ({ dt: r.dt, pressure_hpa: r['Barometer(hPa)'] })), 'day', 'daily', 'pressure_hpa', 'avg')} unit="hPa" />
+                                    </ChartPanel>
+                                )}
+                                {graphSel.charts.windspeed && (
+                                    <ChartPanel title="Wind Speed" avgLabel="Avg" avgValue={buildSeries((archive.rows || []).map(r => ({ dt: r.dt, windspeed_ms: r['WindSpeed(m/s)'] })), 'day', 'daily', 'windspeed_ms', 'avg').avg}>
+                                        <WindSpeedChart data={buildSeries((archive.rows || []).map(r => ({ dt: r.dt, windspeed_ms: r['WindSpeed(m/s)'] })), 'day', 'daily', 'windspeed_ms', 'avg')} unit="m/s" />
+                                    </ChartPanel>
+                                )}
+                                {graphSel.charts.visibility && (
+                                    <ChartPanel title="Visibility" avgLabel="Avg" avgValue={buildSeries(archive.rows || [], 'day', 'daily', 'visibility_km', 'avg').avg}>
+                                        <VisibilityChart data={buildSeries(archive.rows || [], 'day', 'daily', 'visibility_km', 'avg')} unit="km" />
+                                    </ChartPanel>
+                                )}
+                                {graphSel.charts.winddir && (Array.isArray(archive.rows) && archive.rows.some(r => Number.isFinite(r.WindDir))) && (
+                                    <ChartPanel title="Wind Rose">
+                                        <WindRoseChart rows={archive.rows} />
+                                    </ChartPanel>
+                                )}
+                                {graphSel.charts.tempin && (
+                                    <ChartPanel title="Temp In" avgLabel="Avg" avgValue={buildSeries((archive.rows || []).map(r => ({ dt: r.dt, temperature_c: r['TempIn(C)'] })), 'day', 'daily', 'temperature_c', 'avg').avg}>
+                                        <TemperatureChart data={buildSeries((archive.rows || []).map(r => ({ dt: r.dt, temperature_c: r['TempIn(C)'] })), 'day', 'daily', 'temperature_c', 'avg')} unit="°C" />
+                                    </ChartPanel>
+                                )}
+                                {graphSel.charts.humin && (
+                                    <ChartPanel title="Humidity In" avgLabel="Avg" avgValue={buildSeries((archive.rows || []).map(r => ({ dt: r.dt, humidity_pct: r.HumIn })), 'day', 'daily', 'humidity_pct', 'avg').avg}>
+                                        <HumidityChart data={buildSeries((archive.rows || []).map(r => ({ dt: r.dt, humidity_pct: r.HumIn })), 'day', 'daily', 'humidity_pct', 'avg')} unit="%" />
+                                    </ChartPanel>
+                                )}
+                                {graphSel.charts.rainday && (
+                                    <ChartPanel title="Rain Day" avgLabel="Avg" avgValue={buildSeries((archive.rows || []).map(r => ({ dt: r.dt, rainfall_mm: r['RainDay(mm)'] })), 'day', 'daily', 'rainfall_mm', 'avg').avg}>
+                                        <RainfallChart data={buildSeries((archive.rows || []).map(r => ({ dt: r.dt, rainfall_mm: r['RainDay(mm)'] })), 'day', 'daily', 'rainfall_mm', 'avg')} unit="mm" />
+                                    </ChartPanel>
+                                )}
+                                {graphSel.charts.solarrad && (
+                                    <ChartPanel title="Solar Radiation" avgLabel="Avg" avgValue={buildSeries((archive.rows || []).map(r => ({ dt: r.dt, visibility_km: r.SolarRad })), 'day', 'daily', 'visibility_km', 'avg').avg}>
+                                        <VisibilityChart data={buildSeries((archive.rows || []).map(r => ({ dt: r.dt, visibility_km: r.SolarRad })), 'day', 'daily', 'visibility_km', 'avg')} unit="W/m²" />
+                                    </ChartPanel>
+                                )}
                             </>
                         )}
                     </>

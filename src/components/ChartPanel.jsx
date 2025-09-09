@@ -1,33 +1,31 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useRef } from 'react';
 import { initChartDefaults } from '../utils/chartDefaults';
 
 export default function ChartPanel({ title, avgLabel, avgValue, unit, rangeText, children, hasData = true }) {
     initChartDefaults();
     const chartRef = useRef(null);
 
-    const avgPillStyle = useMemo(() => ({
-        background: 'var(--chart-rain-fill)',
-        color: 'var(--chart-rain)',
-        borderRadius: 999,
-        padding: '4px 8px',
-        fontSize: 12,
-    }), []);
-
     const onDownload = () => {
-        const inst = chartRef.current?.canvas ? chartRef.current : (chartRef.current?.chart || chartRef.current);
+        const inst = chartRef.current;
         if (!inst) return;
         const link = document.createElement('a');
-        link.href = inst.toBase64Image();
+        const url = typeof inst.toBase64Image === 'function' ? inst.toBase64Image() : (inst.canvas?.toDataURL?.() || '');
+        if (!url) return;
+        link.href = url;
         link.download = `${title}.png`;
         link.click();
     };
 
     const onResetZoom = () => {
-        const inst = chartRef.current?.resetZoom ? chartRef.current : (chartRef.current?.chart || chartRef.current);
-        if (inst && inst.resetZoom) inst.resetZoom();
+        const inst = chartRef.current;
+        if (inst && typeof inst.resetZoom === 'function') inst.resetZoom();
     };
 
-    const content = typeof children === 'function' ? children(chartRef) : children;
+    let content = typeof children === 'function' ? children(chartRef) : children;
+    if (!content && Array.isArray(children) && children.length > 0) content = children[0];
+    if (React.isValidElement(content)) {
+        content = React.cloneElement(content, { chartRef });
+    }
 
     return (
         <section className="placeholder-section" style={{ marginTop: 16 }}>

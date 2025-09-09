@@ -2,7 +2,7 @@ import React from 'react';
 import { Line } from 'react-chartjs-2';
 import { cssVar } from '../utils/chartDefaults';
 
-export default function HumidityChart({ data, unit = '%' }) {
+export default function HumidityChart({ data, unit = '%', chartRef }) {
     const chartData = {
         labels: data.labels,
         datasets: [
@@ -58,7 +58,7 @@ export default function HumidityChart({ data, unit = '%' }) {
             y: { grid: { color: 'var(--grid)' }, min: 0, max: 100, suggestedMin: 0, suggestedMax: 100, ticks: { stepSize: 10, padding: 6, color: 'var(--axis)' }, title: { display: true, text: unit, color: 'var(--ink-700)', font: { weight: 600 } } },
         },
     };
-    return <Line data={chartData} options={options} />;
+    return <Line ref={chartRef} data={chartData} options={options} />;
 }
 
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { Bar } from 'react-chartjs-2';
 import { cssVar } from '../utils/chartDefaults';
 
-export default function RainfallChart({ data, unit = 'mm' }) {
+export default function RainfallChart({ data, unit = 'mm', chartRef }) {
     const chartData = {
         labels: data.labels,
         datasets: [
@@ -57,7 +57,7 @@ export default function RainfallChart({ data, unit = 'mm' }) {
             y: { beginAtZero: true, grid: { color: 'var(--grid)' }, ticks: { padding: 6, color: 'var(--axis)' }, title: { display: true, text: unit, color: 'var(--ink-700)', font: { weight: 600 } } },
         },
     };
-    return <Bar data={chartData} options={options} />;
+    return <Bar ref={chartRef} data={chartData} options={options} />;
 }
 
 

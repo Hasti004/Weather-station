@@ -7,11 +7,11 @@ const cache = new Map();
 function urlFor(id) {
     switch (id) {
         case 'ahm':
-            return new URL('../data/ahm_weather_Jul-Sep2025.txt', import.meta.url);
+            return new URL('../data/ahm_weather_6months.txt', import.meta.url);
         case 'udi':
-            return new URL('../data/udi_weather_Jul-Sep2025.txt', import.meta.url);
+            return new URL('../data/udi_weather_6months.txt', import.meta.url);
         case 'mtabu':
-            return new URL('../data/mtabu_weather_Jul-Sep2025.txt', import.meta.url);
+            return new URL('../data/mtabu_weather_6months.txt', import.meta.url);
         default:
             return null;
     }

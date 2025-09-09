@@ -1,9 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useEffect } from 'react';
 import { Line } from 'react-chartjs-2';
 import dayjs from 'dayjs';
 import { cssVar } from '../utils/chartDefaults';
 
-export default function TemperatureChart({ data, unit = '°C' }) {
+export default function TemperatureChart({ data, unit = '°C', chartRef }) {
     const chartData = {
         labels: data.labels,
         datasets: [
@@ -65,7 +65,7 @@ export default function TemperatureChart({ data, unit = '°C' }) {
             y: { grid: { color: 'var(--grid)' }, ticks: { beginAtZero: false, precision: 0, padding: 6, color: 'var(--axis)' }, title: { display: true, text: unit, color: 'var(--ink-700)', font: { weight: 600 } } },
         },
     };
-    return <Line data={chartData} options={options} />;
+    return <Line ref={chartRef} data={chartData} options={options} />;
 }
 
 

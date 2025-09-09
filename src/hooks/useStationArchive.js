@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import Papa from 'papaparse';
-import { parseDT } from '../utils/time';
 import { buildSeries, filterRange } from '../utils/aggregate';
 
 function resolveArchiveUrl(id) {
     switch (id) {
         case 'ahm':
-            return new URL('../data/ahm_weather_Jul-Sep2025.txt', import.meta.url);
+            return new URL('../data/ahm_weather_6months.txt', import.meta.url);
         case 'udi':
-            return new URL('../data/udi_weather_Jul-Sep2025.txt', import.meta.url);
+            return new URL('../data/udi_weather_6months.txt', import.meta.url);
         case 'mtabu':
-            return new URL('../data/mtabu_weather_Jul-Sep2025.txt', import.meta.url);
+            return new URL('../data/mtabu_weather_6months.txt', import.meta.url);
         default:
             return null;
     }
@@ -20,6 +19,7 @@ export function useStationArchive(id, { range, granularity }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [charts, setCharts] = useState(null);
+    const [rows, setRows] = useState([]);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -28,7 +28,7 @@ export function useStationArchive(id, { range, granularity }) {
             const url = resolveArchiveUrl(id);
             if (!url) throw new Error('Unknown station id');
 
-            const rows = await new Promise((resolve, reject) => {
+            const allRows = await new Promise((resolve, reject) => {
                 const collected = [];
                 Papa.parse(url.toString(), {
                     download: true,
@@ -37,15 +37,25 @@ export function useStationArchive(id, { range, granularity }) {
                     skipEmptyLines: true,
                     step: (result) => {
                         const r = result.data;
-                        const dt = parseDT(r.date, r.time);
+                        // Build dt from Timestamp (ISO-like string in local tz expected)
+                        const dt = new Date(r.Timestamp);
                         collected.push({
                             dt,
-                            temperature_c: toNum(r.temperature_c),
-                            humidity_pct: toNum(r.humidity_pct),
-                            rainfall_mm: toNum(r.rainfall_mm),
-                            pressure_hpa: toNum(r.pressure_hpa),
-                            windspeed_ms: toNum(r.windspeed_ms),
-                            visibility_km: toNum(r.visibility_km),
+                            // keep original keys for Graph Builder selection semantics
+                            'Barometer(hPa)': toNum(r['Barometer(hPa)']),
+                            BatteryStatus: r.BatteryStatus,
+                            BatteryVolts: toNum(r.BatteryVolts),
+                            HumIn: toNum(r.HumIn),
+                            HumOut: toNum(r.HumOut),
+                            'RainDay(mm)': toNum(r['RainDay(mm)']),
+                            'RainRate(mm/hr)': toNum(r['RainRate(mm/hr)']),
+                            SolarRad: toNum(r.SolarRad),
+                            SunRise: r.SunRise,
+                            SunSet: r.SunSet,
+                            'TempIn(C)': toNum(r['TempIn(C)']),
+                            'TempOut(C)': toNum(r['TempOut(C)']),
+                            WindDir: toNum(r.WindDir),
+                            'WindSpeed(m/s)': toNum(r['WindSpeed(m/s)']),
                         });
                     },
                     complete: () => resolve(collected),
@@ -53,16 +63,18 @@ export function useStationArchive(id, { range, granularity }) {
                 });
             });
 
-            const inRange = range ? filterRange(rows, range) : rows;
+            const inRange = range ? filterRange(allRows, range) : allRows;
+            setRows(inRange);
 
-            const temperature = buildSeries(inRange, granularityLabel(granularity), bucketMode(granularity), 'temperature_c', 'avg');
-            const rainfall = buildSeries(inRange, granularityLabel(granularity), bucketMode(granularity), 'rainfall_mm', 'sum');
-            const humidity = buildSeries(inRange, granularityLabel(granularity), bucketMode(granularity), 'humidity_pct', 'avg');
+            const temperature = buildSeries(inRange.map(r => ({ dt: r.dt, temperature_c: r['TempOut(C)'] })), granularityLabel(granularity), bucketMode(granularity), 'temperature_c', 'avg');
+            const rainfall = buildSeries(inRange.map(r => ({ dt: r.dt, rainfall_mm: r['RainRate(mm/hr)'] })), granularityLabel(granularity), bucketMode(granularity), 'rainfall_mm', 'sum');
+            const humidity = buildSeries(inRange.map(r => ({ dt: r.dt, humidity_pct: r.HumOut })), granularityLabel(granularity), bucketMode(granularity), 'humidity_pct', 'avg');
 
             setCharts({ temperature, rainfall, humidity });
         } catch (e) {
             setError(e.message || 'Archive load failed');
             setCharts(null);
+            setRows([]);
         } finally {
             setLoading(false);
         }
@@ -72,7 +84,7 @@ export function useStationArchive(id, { range, granularity }) {
         load();
     }, [load]);
 
-    return { loading, error, charts };
+    return { loading, error, charts, rows };
 }
 
 function toNum(v) {
