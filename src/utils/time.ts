@@ -37,7 +37,7 @@ export function formatLabel(dt: Date, granularity: Granularity): string {
         case 'day':
             return d.format('YYYY-MM-DD');
         case 'week': {
-            const week = d.week ? (d as any).week() : Math.ceil(d.date() / 7);
+            const week = Math.ceil(d.date() / 7);
             return `${d.format('YYYY')}-W${String(week).padStart(2, '0')}`;
         }
         case 'month':
