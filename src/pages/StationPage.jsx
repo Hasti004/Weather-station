@@ -71,7 +71,6 @@ export default function StationPage() {
                     </h2>
                     <Link to="/" style={{ color: 'var(--brand-600)', textDecoration: 'none' }}>&larr; All Stations</Link>
                 </div>
-                <TimeFilterToolbar value={filter} onChange={setFilter} />
                 {live.error ? (
                     <ErrorBanner message={live.error} />
                 ) : live.loading ? (
@@ -116,6 +115,9 @@ export default function StationPage() {
                             <div className="skeleton" style={{ height: 220, marginTop: 16 }} />
                         ) : (
                             <>
+                                <div style={{ marginTop: 12, marginBottom: 8 }}>
+                                    <TimeFilterToolbar value={filter} onChange={setFilter} />
+                                </div>
                                 <ChartPanel title="Temperature" avgLabel="Avg" avgValue={archive.charts.temperature.avg}>
                                     <TemperatureChart data={archive.charts.temperature} unit="°C" />
                                 </ChartPanel>
