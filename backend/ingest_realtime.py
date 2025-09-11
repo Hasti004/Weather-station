@@ -331,11 +331,11 @@ class WeatherFileHandler(FileSystemEventHandler):
 
         # Read only the new bytes since last position
         with open_text(self.file_path) as f:
-                f.seek(self.file_position)
+            f.seek(self.file_position)
             chunk = f.read()
             if not chunk:
-                    return
-                self.file_position = f.tell()
+                return
+            self.file_position = f.tell()
 
         # Handle partial trailing line across writes
         text = self._tail_buffer + chunk
@@ -361,7 +361,7 @@ class WeatherFileHandler(FileSystemEventHandler):
                     tup = self._dict_to_tuple(d)   # <-- this method exists below
                     if tup:
                         rows_as_tuples.append(tup)
-        except Exception as e:
+            except Exception as e:
                 print(f"[warn] row parse error: {e}; line={line[:120]}...")
                 continue
 
@@ -389,7 +389,7 @@ class WeatherFileHandler(FileSystemEventHandler):
         """Map a row-dict to the INSERT tuple expected by db.batch_insert_readings (11 values)."""
         ts = d.get("Timestamp") or d.get("time") or ""
         reading_ts = self._parse_timestamp(ts)
-            if not reading_ts:
+        if not reading_ts:
             return None
 
         def getf(k: str) -> Optional[float]:
@@ -412,19 +412,19 @@ class WeatherFileHandler(FileSystemEventHandler):
         raw_line = ",".join(f"{k}={d.get(k, '')}" for k in d.keys())
         line_checksum = hashlib.sha256(raw_line.encode("utf-8", errors="ignore")).hexdigest()
 
-            return (
-                self.obs_id,
+        return (
+            self.obs_id,
             reading_ts,           # datetime object (mysql-connector handles this)
-                temperature_c,
-                humidity_pct,
-                rainfall_mm,
-                pressure_hpa,
-                windspeed_ms,
+            temperature_c,
+            humidity_pct,
+            rainfall_mm,
+            pressure_hpa,
+            windspeed_ms,
             battery_voltage,
             fields_json,
-                raw_line,
+            raw_line,
             line_checksum,
-            )
+        )
 
     def _parse_timestamp(self, s: str) -> Optional[datetime]:
         if not s:

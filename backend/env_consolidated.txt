@@ -1,0 +1,24 @@
+# Consolidated Environment Configuration Template
+# Copy this file to .env and uncomment the settings you need
+
+# Database Configuration
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=Hasti@123
+
+# Database Names (choose one based on your system)
+# For Observatory system:
+DB_NAME=observatory
+# For Weather Stations system:
+# DB_NAME=weather_stations
+
+# Observatory-specific settings (uncomment if using observatory system)
+# DATA_FILE_APPEND=D:\Full Stack Projects\weathersta\backend\data\live_readings.csv
+# DATA_FILE_SNAPSHOT=D:\Full Stack Projects\weathersta\backend\data\live_snapshot.csv
+# OBS_ID=ahm
+# CSV_HAS_HEADER=true
+# SETTLE_MS=600
+
+# Weather Stations-specific settings (uncomment if using weather stations system)
+# WEATHER_DATA_DIR=backend/data
