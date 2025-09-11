@@ -1,0 +1,4 @@
+2025-09-11 11:19:37,865 - INFO - Test log message
+2025-09-11 11:19:38,499 - INFO - Removed old backup: backup_2.sql
+2025-09-11 11:19:38,504 - INFO - Removed old backup: backup_1.sql
+2025-09-11 11:19:38,518 - INFO - Removed old backup: backup_0.sql

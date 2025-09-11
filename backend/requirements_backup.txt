@@ -1,0 +1,4 @@
+# MySQL Backup Script Requirements
+# This script uses only Python standard library modules:
+# - os, sys, subprocess, shutil, logging, datetime, pathlib
+# No external dependencies required.

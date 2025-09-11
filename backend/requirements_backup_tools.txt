@@ -1,0 +1,6 @@
+# MySQL Backup Tools Requirements
+# Only mysql-connector-python is needed for verify_backup.py
+mysql-connector-python
+
+# All other scripts use only Python standard library modules:
+# - os, sys, subprocess, shutil, logging, datetime, pathlib

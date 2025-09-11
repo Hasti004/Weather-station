@@ -1,0 +1,14 @@
+2025-09-11 11:22:13,324 - INFO - ==================================================
+2025-09-11 11:22:13,326 - INFO - Starting MySQL backup process
+2025-09-11 11:22:13,331 - INFO - Database: observatory
+2025-09-11 11:22:13,355 - INFO - Backup directory: D:\Full Stack Projects\weathersta\backend\backups
+2025-09-11 11:22:13,360 - INFO - Backup type: daily
+2025-09-11 11:22:13,362 - INFO - Step 1: Exporting database...
+2025-09-11 11:22:13,447 - ERROR - Database export failed: mysqldump command not found. Please ensure MySQL client tools are installed and in PATH.
+2025-09-11 11:40:17,076 - INFO - ==================================================
+2025-09-11 11:40:17,078 - INFO - Starting MySQL backup process
+2025-09-11 11:40:17,085 - INFO - Database: observatory
+2025-09-11 11:40:17,088 - INFO - Backup directory: D:\Full Stack Projects\weathersta\backend\backups
+2025-09-11 11:40:17,089 - INFO - Backup type: daily
+2025-09-11 11:40:17,089 - INFO - Step 1: Exporting database...
+2025-09-11 11:40:17,141 - ERROR - Database export failed: mysqldump command not found. Please ensure MySQL client tools are installed and in PATH.
