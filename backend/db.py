@@ -8,17 +8,22 @@ BASE_DIR = Path(__file__).resolve().parent
 DOTENV = BASE_DIR / ".env"
 
 def _load_env_safely():
-    enc = "utf-8"
+    """Load environment variables with BOM handling."""
     try:
-        if DOTENV.exists():
-            with open(DOTENV, "rb") as fh:
-                head = fh.read(4)
-            if head.startswith(b"\xff\xfe") or head.startswith(b"\xfe\xff"):
-                enc = "utf-16"           # handle UTF-16 BOM
-        load_dotenv(dotenv_path=str(DOTENV), override=True, encoding=enc)
+        # Try UTF-8 with BOM first (most common issue)
+        load_dotenv(dotenv_path=str(DOTENV), override=True, encoding="utf-8-sig")
     except Exception as e:
-        print(f"[env] failed to load .env ({enc}): {e}. Falling back to defaults.")
-        load_dotenv(override=True, encoding="utf-8")
+        try:
+            # Fallback to regular UTF-8
+            load_dotenv(dotenv_path=str(DOTENV), override=True, encoding="utf-8")
+        except Exception as e2:
+            try:
+                # Last resort: UTF-16 with BOM
+                load_dotenv(dotenv_path=str(DOTENV), override=True, encoding="utf-16")
+            except Exception as e3:
+                print(f"[env] failed to load .env: {e3}. Using defaults.")
+                # Load with no file to use defaults
+                load_dotenv(override=True)
 
 _load_env_safely()
 
@@ -27,7 +32,7 @@ DB = dict(
     port=int(os.getenv("DB_PORT", "3306")),
     user=os.getenv("DB_USER", "root"),
     password=os.getenv("DB_PASSWORD", ""),
-    database=os.getenv("DB_NAME", "observatory"),
+    database=os.getenv("DB_NAME", "weather_stations"),
 )
 
 def get_conn():

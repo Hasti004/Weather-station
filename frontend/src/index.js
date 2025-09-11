@@ -2,12 +2,15 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import reportWebVitals from './reportWebVitals';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary fallback={<div style={{ color: 'red', padding: 16 }}>❌ Something went wrong. Please try again later.</div>}>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 );
 
