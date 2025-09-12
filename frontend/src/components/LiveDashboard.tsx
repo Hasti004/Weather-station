@@ -3,8 +3,9 @@
  * Shows data from all weather stations with auto-refresh every 30 seconds
  */
 
-import React from 'react';
-import { useLiveLatest } from '../hooks/useLiveLatest';
+import React, { useState, useEffect } from 'react';
+import { fetchLatest, handleApiError } from '../services/api';
+import { useObservatories } from '../hooks/useObservatories';
 
 interface WeatherReading {
   station_id: number;
@@ -28,7 +29,35 @@ interface WeatherReading {
 }
 
 const LiveDashboard: React.FC = () => {
-  const { data, isLoading, error, refresh, lastUpdated } = useLiveLatest();
+  const [data, setData] = useState<WeatherReading[] | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const { getStationName, getStationLocation } = useObservatories();
+
+  const loadData = async () => {
+    try {
+      setError(null);
+      const result = await fetchLatest();
+      setData(result.data || []);
+      setLastUpdated(new Date());
+    } catch (err) {
+      setError(handleApiError(err));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const refresh = () => {
+    setIsLoading(true);
+    loadData();
+  };
+
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(loadData, Number(process.env.REACT_APP_LIVE_INTERVAL_MS || 30000));
+    return () => clearInterval(interval);
+  }, []);
 
   // Always return valid JSX - never null
   if (isLoading && !data) {
@@ -85,12 +114,7 @@ const LiveDashboard: React.FC = () => {
   };
 
   const getStationDisplayName = (stationId: number): string => {
-    const stationMap: { [key: number]: string } = {
-      1: 'Udaipur',
-      2: 'Ahmedabad',
-      3: 'Mount Abu',
-    };
-    return stationMap[stationId] || `Station ${stationId}`;
+    return getStationName(stationId);
   };
 
   // Always return valid JSX - never null
@@ -160,7 +184,7 @@ const LiveDashboard: React.FC = () => {
           <h3 className="text-xl font-semibold text-gray-800">
             {getStationDisplayName(reading.station_id)}
           </h3>
-          <p className="text-sm text-gray-600">{reading.location}</p>
+          <p className="text-sm text-gray-600">{getStationLocation(reading.station_id)}</p>
         </div>
         <div className="text-right">
           <div className="text-2xl font-bold text-blue-600">
