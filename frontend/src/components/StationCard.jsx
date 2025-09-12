@@ -15,6 +15,8 @@ function Metric({ icon: Icon, label, value, unit }) {
 }
 
 export default function StationCard({ id, name, metrics, imageSrc, onOpenAvailability }) {
+    const [imageError, setImageError] = React.useState(false);
+
     const mapped = metrics
         ? {
             temperature: { value: metrics.temperature_c ?? '—', unit: '°C' },
@@ -29,9 +31,28 @@ export default function StationCard({ id, name, metrics, imageSrc, onOpenAvailab
     return (
         <Link to={`/station/${id}`} className="card station-card" aria-label={`View ${name} station`} style={{ display: 'block', textDecoration: 'none', color: 'inherit', border: '1px solid var(--panel-border)' }}>
             <div className="card-banner">
-                {imageSrc ? (
-                    <img src={imageSrc} alt={`${name} skyline (mock)`} />
-                ) : null}
+                {imageSrc && !imageError ? (
+                    <img
+                        src={imageSrc}
+                        alt={`${name} skyline`}
+                        onError={() => setImageError(true)}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                ) : (
+                    <div style={{
+                        width: '100%',
+                        height: '100%',
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontSize: '24px',
+                        fontWeight: 'bold'
+                    }}>
+                        {name.charAt(0)}
+                    </div>
+                )}
                 <div className="overlay">
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <FiMapPin size={16} />

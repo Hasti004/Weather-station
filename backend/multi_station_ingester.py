@@ -46,7 +46,7 @@ STATION_CONFIG = {
     "mount abu": {
         "obs_id": "mtabu",
         "live_file": "mountabu_live.txt",
-        "columns": ["timestamp", "battery_volts", "hum_in", "hum_out", "rain_day_mm",
+        "columns": ["timestamp", "barometer_hpa", "battery_status", "battery_volts", "hum_in", "hum_out", "rain_day_mm",
                    "rain_rate_mm_hr", "solar_rad", "sunrise", "sunset", "temp_in_c",
                    "temp_out_c", "wind_dir", "wind_speed_ms"]
     }
@@ -74,23 +74,21 @@ class MultiStationIngester:
         Returns:
             None for invalid values, formatted value otherwise
         """
-        if not val or val.strip() == '':
+        if val is None:
             return None
 
-        val = val.strip()
-
-        # Check for invalid values
-        if val.upper() in ['NA', 'NAN', '-999', 'NULL', 'NONE']:
+        v = str(val).strip().upper()
+        if v in ("", "NA", "NAN", "NULL", "-999"):
             return None
 
-        # Try to convert to float for numeric values
         try:
-            float_val = float(val)
-            # Round to 1 decimal place
-            return round(float_val, 1)
+            # Try numeric conversion
+            if "." in v:
+                return round(float(v), 2)
+            else:
+                return int(v)
         except ValueError:
-            # Keep as string (e.g., wind_dir, battery_status)
-            return val
+            return val  # keep string values (like wind_dir)
 
     def parse_timestamp(self, timestamp_str: str) -> Optional[datetime]:
         """Parse timestamp string to datetime object."""
@@ -233,6 +231,13 @@ class MultiStationIngester:
 
             cursor.execute(sql, values)
             conn.commit()
+
+            # Log if this was an update (duplicate) vs insert
+            if cursor.rowcount == 0:
+                print(f"[INFO] Skipped duplicate reading for {obs_id} at {timestamp}")
+            else:
+                print(f"[INFO] Inserted new reading for {obs_id} at {timestamp}")
+
             return True
 
         except Exception as e:

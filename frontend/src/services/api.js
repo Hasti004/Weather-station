@@ -3,7 +3,7 @@
  * Replaces file-based data fetching with HTTP endpoints
  */
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || "http://localhost:8000";
+const API_BASE = process.env.REACT_APP_API_BASE_URL || process.env.REACT_APP_API_BASE || "http://localhost:8000";
 
 /**
  * Fetch latest readings from all weather stations
@@ -20,21 +20,36 @@ export async function fetchLatest() {
 /**
  * Fetch historical data for a specific station within a date range
  * @param {string|number} stationId - Station identifier
- * @param {string} start - Start date in ISO format
- * @param {string} end - End date in ISO format
+ * @param {string} start - Start date in YYYY-MM-DD format
+ * @param {string} end - End date in YYYY-MM-DD format
  * @returns {Promise<Object>} Response with historical data
  */
 export async function fetchRange(stationId, start, end) {
+  // Convert dates to proper ISO format with time
+  const startISO = `${start}T00:00:00`;
+  const endISO = `${end}T23:59:59`;
+
   const params = new URLSearchParams({
     station_id: stationId,
-    start: start,
-    end: end
+    start: startISO,
+    end: endISO
   });
-  const res = await fetch(`${API_BASE}/range?${params}`);
-  if (!res.ok) {
-    throw new Error(`HTTP error! status: ${res.status}`);
+
+  console.log(`Fetching range data: ${API_BASE}/range?${params}`);
+
+  try {
+    const res = await fetch(`${API_BASE}/range?${params}`);
+    if (!res.ok) {
+      console.error(`API request failed: ${res.status} ${res.statusText}`);
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    const data = await res.json();
+    console.log(`Range data received: ${data.data?.length || 0} records`);
+    return data;
+  } catch (error) {
+    console.error('Error fetching range data:', error);
+    throw error;
   }
-  return res.json();
 }
 
 /**

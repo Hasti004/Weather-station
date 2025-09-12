@@ -157,26 +157,26 @@ export default function StationPage() {
                             <StatCard icon={FiEye} label="Visibility" value={mapped?.visibility.value || '—'} unit={mapped?.visibility.unit || 'km'} />
                         </div>
                         {liveData && (
-                            <div style={{ marginTop: 12 }}>
-                                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-                                    <tbody>
-                                        {[
+                        <div style={{ marginTop: 12 }}>
+                            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+                                <tbody>
+                                    {[
                                             ['Temperature', `${liveData.temperature_c ?? '—'} °C`],
                                             ['Humidity', `${liveData.humidity_pct ?? '—'} %`],
                                             ['Rainfall', `${liveData.rainfall_mm ?? '—'} mm`],
                                             ['Pressure', `${liveData.pressure_hpa ?? '—'} hPa`],
                                             ['Wind Speed', `${liveData.windspeed_ms ?? '—'} m/s`],
                                             ['Wind Direction', `${liveData.wind_dir ?? '—'}`],
-                                        ].map((row, idx) => (
-                                            <tr key={idx}>
-                                                <td style={{ padding: '8px 8px', color: '#334155' }}>{row[0]}</td>
-                                                <td style={{ padding: '8px 8px', fontWeight: 600 }}>{row[1]}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                    ].map((row, idx) => (
+                                        <tr key={idx}>
+                                            <td style={{ padding: '8px 8px', color: '#334155' }}>{row[0]}</td>
+                                            <td style={{ padding: '8px 8px', fontWeight: 600 }}>{row[1]}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                                 <div style={{ fontSize: 12, color: '#64748B', marginTop: 6 }}>Last updated: {lastUpdated ? lastUpdated.toLocaleString() : '—'}</div>
-                            </div>
+                        </div>
                         )}
                         <div style={{ marginTop: 12 }}>
                             <GraphBuilder availableFields={FIELD_META} hasWindDir={Array.isArray(archiveData) && archiveData.some(r => Number.isFinite(r.wind_dir))} selection={graphSel} onChange={setGraphSel} />

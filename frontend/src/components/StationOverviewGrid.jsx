@@ -7,10 +7,21 @@ export default function StationOverviewGrid({ stations, onOpenAvailability }) {
         udi: new URL('../assets/cities/udaipur.svg', import.meta.url),
         mtabu: new URL('../assets/cities/mtabu.svg', import.meta.url),
     };
+
+    // Fallback image for missing images
+    const fallbackImage = new URL('../assets/cities/ahmedabad.svg', import.meta.url);
+
     return (
         <div className="station-row" aria-label="stations-row">
             {stations.map((s) => (
-                <StationCard key={s.id} id={s.id} name={s.name} metrics={s.metrics} imageSrc={images[s.id]} onOpenAvailability={onOpenAvailability} />
+                <StationCard
+                    key={s.id}
+                    id={s.id}
+                    name={s.name}
+                    metrics={s.metrics}
+                    imageSrc={images[s.id] || fallbackImage}
+                    onOpenAvailability={onOpenAvailability}
+                />
             ))}
         </div>
     );

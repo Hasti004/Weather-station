@@ -74,9 +74,10 @@ STATION_CONFIG = {
     },
     "mountabu": {
         "station_id": 3,
-        "columns": ["timestamp", "hum_in", "hum_out", "rain_day_mm", "rain_rate_mm_hr",
+        "columns": ["timestamp", "barometer_hpa", "battery_status", "battery_volts",
+                   "hum_in", "hum_out", "rain_day_mm", "rain_rate_mm_hr",
                    "solar_rad", "sunrise", "sunset", "temp_in_c", "temp_out_c",
-                   "wind_dir", "wind_speed_ms"]  # Missing barometer and battery sensors
+                   "wind_dir", "wind_speed_ms"]
     }
 }
 
@@ -97,26 +98,21 @@ def clean_value(val: str) -> Optional[Any]:
     Returns:
         None for invalid/missing values, float for numeric, string for text
     """
-    if not val or val.strip() == "":
+    if val is None:
         return None
 
-    val = val.strip()
-
-    # Handle common null/missing value indicators
-    if val.upper() in ["", "NA", "NAN", "NULL", "-999", "N/A"]:
+    v = str(val).strip().upper()
+    if v in ("", "NA", "NAN", "NULL", "-999"):
         return None
 
-    # Try to convert to numeric
     try:
-        num_val = float(val)
-        # Handle special numeric null indicators
-        if num_val == -999 or num_val == -999.0:
-            return None
-        # Round to 1 decimal place for numeric values
-        return round(num_val, 1)
+        # Try numeric conversion
+        if "." in v:
+            return round(float(v), 2)
+        else:
+            return int(v)
     except ValueError:
-        # Return as string for non-numeric values (like wind_dir, battery_status)
-        return val
+        return val  # keep string values (like wind_dir)
 
 def parse_timestamp(ts_str: str) -> Optional[str]:
     """
@@ -163,7 +159,7 @@ def parse_time_value(time_str: str) -> Optional[str]:
         Normalized time string or None if invalid
     """
     if not time_str or time_str.strip() == "":
-        return None
+                    return None
 
     time_str = time_str.strip()
 
@@ -222,7 +218,7 @@ def parse_line(station: str, line: str) -> Optional[Dict[str, Any]]:
 
     # Validate required fields
     if not result.get("timestamp"):
-        return None
+                    return None
 
     return result
 
@@ -230,23 +226,23 @@ def generate_checksum(line: str) -> str:
     """Generate SHA256 checksum for line deduplication."""
     return hashlib.sha256(line.encode('utf-8')).hexdigest()
 
-def insert_bulk(station_id: int, rows: List[Dict[str, Any]]) -> int:
+def insert_bulk(station_id: int, rows: List[Dict[str, Any]]) -> Tuple[int, int]:
     """
-    Insert multiple rows into the readings table.
+    Insert multiple rows into the readings table using upsert pattern.
 
     Args:
         station_id: Station ID
         rows: List of reading dictionaries
 
     Returns:
-        Number of rows actually inserted
+        Tuple of (inserted_count, skipped_count)
     """
     if not rows:
-        return 0
+        return 0, 0
 
-    # Prepare INSERT statement
+    # Prepare INSERT statement with duplicate handling (upsert pattern)
     insert_sql = """
-    INSERT IGNORE INTO readings (
+    INSERT INTO readings (
         station_id, timestamp, barometer_hpa, battery_status, battery_volts,
         hum_in, hum_out, rain_day_mm, rain_rate_mm_hr, solar_rad,
         sunrise, sunset, temp_in_c, temp_out_c, wind_dir, wind_speed_ms
@@ -254,7 +250,7 @@ def insert_bulk(station_id: int, rows: List[Dict[str, Any]]) -> int:
         %(station_id)s, %(timestamp)s, %(barometer_hpa)s, %(battery_status)s, %(battery_volts)s,
         %(hum_in)s, %(hum_out)s, %(rain_day_mm)s, %(rain_rate_mm_hr)s, %(solar_rad)s,
         %(sunrise)s, %(sunset)s, %(temp_in_c)s, %(temp_out_c)s, %(wind_dir)s, %(wind_speed_ms)s
-    )
+    ) ON DUPLICATE KEY UPDATE station_id = station_id
     """
 
     conn = mysql.connector.connect(**DB_CONFIG)
@@ -264,19 +260,104 @@ def insert_bulk(station_id: int, rows: List[Dict[str, Any]]) -> int:
         # Execute batch insert
         cursor.executemany(insert_sql, rows)
         inserted_count = cursor.rowcount
+        skipped_count = len(rows) - inserted_count
 
         conn.commit()
-        return inserted_count
+
+        # Log results
+        if inserted_count > 0:
+            print(f"  Inserted {inserted_count} new rows")
+        if skipped_count > 0:
+            print(f"  Skipped {skipped_count} duplicate rows (already exist)")
+
+        return inserted_count, skipped_count
 
     except mysql.connector.Error as e:
         print(f"Database error during bulk insert: {e}")
         conn.rollback()
-        return 0
+        return 0, 0
     finally:
         cursor.close()
         conn.close()
 
-def load_txt(station_name: str, filepath: Path) -> int:
+def analyze_duplicates(station_name: str, filepath: Path) -> Dict[str, int]:
+    """
+    Analyze a file for potential duplicates without inserting into database.
+
+    Args:
+        station_name: Station name (key in STATION_CONFIG)
+        filepath: Path to the data file
+
+    Returns:
+        Dictionary with analysis results
+    """
+    if station_name not in STATION_CONFIG:
+        print(f"Error: Unknown station: {station_name}")
+        return {"new": 0, "duplicates": 0, "errors": 0}
+
+    config = STATION_CONFIG[station_name]
+    station_id = config["station_id"]
+
+    print(f"Analyzing {station_name} data from {filepath}...")
+
+    # Get existing timestamps for this station
+    conn = mysql.connector.connect(**DB_CONFIG)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT timestamp FROM readings WHERE station_id = %s", (station_id,))
+        existing_timestamps = {row[0] for row in cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
+
+    new_count = 0
+    duplicate_count = 0
+    error_count = 0
+    line_count = 0
+
+    try:
+        with filepath.open('r', encoding='utf-8', errors='replace') as f:
+            # Skip header line if present
+            first_line = f.readline().strip()
+            if first_line.lower().startswith('timestamp') or 'timestamp' in first_line.lower():
+                print("  Skipping header line")
+            else:
+                f.seek(0)
+
+            for line_num, line in enumerate(f, start=2 if first_line else 1):
+                line = line.strip()
+                if not line:
+                    continue
+
+                line_count += 1
+
+                try:
+                    parsed = parse_line(station_name, line)
+                    if parsed and parsed.get("timestamp"):
+                        if parsed["timestamp"] in existing_timestamps:
+                            duplicate_count += 1
+                        else:
+                            new_count += 1
+                    else:
+                        error_count += 1
+                        if error_count <= 5:
+                            print(f"  Warning: Could not parse line {line_num}: {line[:100]}...")
+                except Exception as e:
+                    error_count += 1
+                    if error_count <= 5:
+                        print(f"  Error parsing line {line_num}: {e}")
+
+    except Exception as e:
+        print(f"Error reading file {filepath}: {e}")
+        return {"new": 0, "duplicates": 0, "errors": 0}
+
+    print(f"  Processed {line_count} lines, {error_count} errors")
+    print(f"  Would insert {new_count} new rows")
+    print(f"  Would skip {duplicate_count} duplicate rows")
+
+    return {"new": new_count, "duplicates": duplicate_count, "errors": error_count}
+
+def load_txt(station_name: str, filepath: Path) -> Tuple[int, int]:
     """
     Load data from a text file into the database.
 
@@ -285,15 +366,15 @@ def load_txt(station_name: str, filepath: Path) -> int:
         filepath: Path to the data file
 
     Returns:
-        Number of rows inserted
+        Tuple of (inserted_count, skipped_count)
     """
     if not filepath.exists():
         print(f"Error: File not found: {filepath}")
-        return 0
+        return 0, 0
 
     if station_name not in STATION_CONFIG:
         print(f"Error: Unknown station: {station_name}")
-        return 0
+        return 0, 0
 
     print(f"Loading {station_name} data from {filepath}...")
 
@@ -336,14 +417,12 @@ def load_txt(station_name: str, filepath: Path) -> int:
 
                 # Process in batches of 1000
                 if len(rows) >= 1000:
-                    inserted = insert_bulk(station_id, rows)
-                    print(f"  Inserted batch of {inserted} rows")
+                    inserted, skipped = insert_bulk(station_id, rows)
                     rows = []
 
         # Insert remaining rows
         if rows:
-            inserted = insert_bulk(station_id, rows)
-            print(f"  Inserted final batch of {inserted} rows")
+            inserted, skipped = insert_bulk(station_id, rows)
 
         # Get total inserted count
         conn = mysql.connector.connect(**DB_CONFIG)
@@ -351,18 +430,18 @@ def load_txt(station_name: str, filepath: Path) -> int:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM readings WHERE station_id = %s", (station_id,))
             total_count = cursor.fetchone()[0]
-        finally:
+    finally:
             cursor.close()
             conn.close()
 
         print(f"  Processed {line_count} lines, {error_count} errors")
         print(f"  Station {station_name} now has {total_count} total readings")
 
-        return line_count - error_count
+        return line_count - error_count, 0  # Return (inserted, skipped)
 
     except Exception as e:
         print(f"Error reading file {filepath}: {e}")
-        return 0
+        return 0, 0
 
 def find_data_files(data_dir: Path) -> Dict[str, List[Path]]:
     """
@@ -485,21 +564,26 @@ Examples:
             print(f"\n=== Processing {station.upper()} ===")
             for file_path in files:
                 if args.dry_run:
-                    print(f"[DRY RUN] Would load {file_path}")
+                    analysis = analyze_duplicates(station, file_path)
+                    total_inserted += analysis["new"]
                 else:
-                    inserted = load_txt(station, file_path)
+                    inserted, skipped = load_txt(station, file_path)
                     total_inserted += inserted
 
     else:
         # Load specific file
         if args.dry_run:
-            print(f"[DRY RUN] Would load {args.station} from {args.file}")
+            analysis = analyze_duplicates(args.station, args.file)
+            total_inserted += analysis["new"]
         else:
-            inserted = load_txt(args.station, args.file)
+            inserted, skipped = load_txt(args.station, args.file)
             total_inserted += inserted
 
-    if not args.dry_run:
-        print(f"\n=== SUMMARY ===")
+    print(f"\n=== SUMMARY ===")
+    if args.dry_run:
+        print(f"Total rows that would be inserted: {total_inserted}")
+        print("(This was a dry run - no data was actually inserted)")
+    else:
         print(f"Total rows processed: {total_inserted}")
 
         # Show current database status

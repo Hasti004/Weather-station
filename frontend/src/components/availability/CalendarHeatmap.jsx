@@ -21,8 +21,16 @@ export default function CalendarHeatmap({ month, year, availableDates, minDate, 
     function classify(d) {
         const inMonth = d.month() === start.month();
         if (!inMonth) return 'out';
+
+        // Check if date is in the future
+        const today = dayjs().startOf('day');
+        if (d.isAfter(today)) return 'out';
+
+        // Check if date is within the data range
         const within = (!minDate || d.toDate() >= minDate) && (!maxDate || d.toDate() <= maxDate);
         if (!within) return 'out';
+
+        // Check if data is available for this date
         const key = d.format('YYYY-MM-DD');
         return availableDates.has(key) ? 'ok' : 'miss';
     }

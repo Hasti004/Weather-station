@@ -1,11 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import { PolarArea } from 'react-chartjs-2';
-import { COMPASS_16, binWindDirections } from '../../utils/wind';
+import { COMPASS_16, binWindDirections, calculateDatasetVectorAverageWindDirection } from '../../utils/wind';
 
 export default function WindRoseChart({ rows, weightedDefault = false }) {
     const [weighted, setWeighted] = useState(weightedDefault);
     const adapted = useMemo(() => (rows || []).map(r => ({ wind_dir_deg: r.WindDir, windspeed_ms: r['WindSpeed(m/s)'] })), [rows]);
     const counts = useMemo(() => binWindDirections(adapted, weighted), [adapted, weighted]);
+
+    // Calculate vector-based average wind direction
+    const vectorAverage = useMemo(() =>
+        calculateDatasetVectorAverageWindDirection(adapted, weighted),
+        [adapted, weighted]
+    );
 
     const hasDir = adapted?.some(r => typeof r.wind_dir_deg === 'number' && Number.isFinite(r.wind_dir_deg));
     if (!hasDir) {
@@ -36,7 +42,15 @@ export default function WindRoseChart({ rows, weightedDefault = false }) {
 
     return (
         <div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: '#475569' }}>
+                    {vectorAverage !== null && (
+                        <span>
+                            Vector Average: {vectorAverage.toFixed(1)}°
+                            ({COMPASS_16[Math.round(vectorAverage / 22.5) % 16]})
+                        </span>
+                    )}
+                </div>
                 <label style={{ fontSize: 12, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <input type="checkbox" checked={weighted} onChange={(e) => setWeighted(e.target.checked)} />
                     Weight by wind speed

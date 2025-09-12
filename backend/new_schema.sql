@@ -52,3 +52,14 @@ WHERE r.timestamp = (
     FROM readings r2
     WHERE r2.station_id = r.station_id
 );
+
+
+SHOW DATABASES;
+USE weather_stations;
+SHOW TABLES;
+DESCRIBE stations;
+DESCRIBE readings;
+
+
+ALTER TABLE readings
+MODIFY COLUMN wind_dir INT;
