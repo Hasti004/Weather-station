@@ -430,7 +430,7 @@ def load_txt(station_name: str, filepath: Path) -> Tuple[int, int]:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM readings WHERE station_id = %s", (station_id,))
             total_count = cursor.fetchone()[0]
-    finally:
+        finally:
             cursor.close()
             conn.close()
 

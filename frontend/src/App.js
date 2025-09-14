@@ -5,6 +5,7 @@ import QueryProvider from './providers/QueryProvider';
 import HomePage from './pages/HomePage';
 import StationPage from './pages/StationPage';
 import Dashboard from './pages/Dashboard';
+import RefactoredDashboard from './pages/RefactoredDashboard';
 import LivePage from './pages/LivePage.js';
 import TestPage from './pages/TestPage.js';
 // ErrorBoundary is now applied globally in index.js. Do not wrap here to avoid duplication.
@@ -18,6 +19,8 @@ function App() {
           <Route path="/station/:id" element={<StationPage />} />
           <Route path="/live" element={<LivePage />} />
           <Route path="/test" element={<TestPage />} />
+          {/* New refactored dashboard */}
+          <Route path="/dashboard" element={<RefactoredDashboard />} />
           {/* Legacy single-station dashboard (kept for compatibility) */}
           <Route path="/legacy" element={<Dashboard />} />
         </Routes>

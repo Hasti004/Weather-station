@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import StationOverviewGrid from '../components/StationOverviewGrid';
-import DataAvailabilityButton from '../components/DataAvailabilityButton';
 import AvailabilityModal from '../components/availability/AvailabilityModal';
 import { fetchLatest, fetchSeries } from '../services/api';
 import ClimateSummary from '../components/ClimateSummary';
@@ -235,11 +234,6 @@ export default function HomePage() {
                                         </div>
                                     )}
 
-                                    <DataAvailabilityButton
-                                        stationId={station.id}
-                                        stationName={station.name}
-                                        className="station-data-button"
-                                    />
                                 </div>
                             ))}
                         </div>

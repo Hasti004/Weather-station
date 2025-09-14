@@ -25,7 +25,30 @@ ChartJS.register(
 );
 
 export default function ClimateSummary({ climateData, seriesData }) {
-    // Calculate aggregated climate data
+    // Group data by station for individual summaries
+    const stationSummaries = React.useMemo(() => {
+        if (!climateData || climateData.length === 0) return [];
+
+        const stations = {};
+        climateData.forEach(item => {
+            const stationId = item.station_id;
+            const stationName = item.station_name ||
+                (stationId === 1 ? 'Udaipur' :
+                 stationId === 2 ? 'Ahmedabad' :
+                 stationId === 3 ? 'Mount Abu' : `Station ${stationId}`);
+
+            if (!stations[stationId]) {
+                stations[stationId] = {
+                    id: stationId,
+                    name: stationName,
+                    data: item
+                };
+            }
+        });
+        return Object.values(stations);
+    }, [climateData]);
+
+    // Calculate aggregated climate data for overall summary
     const aggregatedData = React.useMemo(() => {
         if (!climateData || climateData.length === 0) return null;
 
@@ -193,7 +216,7 @@ export default function ClimateSummary({ climateData, seriesData }) {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            {/* Today's Climate Summary */}
+            {/* Station Summaries */}
             <div style={{
                 background: 'rgba(255, 255, 255, 0.1)',
                 backdropFilter: 'blur(10px)',
@@ -209,69 +232,71 @@ export default function ClimateSummary({ climateData, seriesData }) {
                     margin: '0 0 20px 0',
                     textShadow: '0 2px 4px rgba(0, 0, 0, 0.3)'
                 }}>
-                    Today's Climate Summary
+                    Station Summaries
                 </h3>
 
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                    gap: '20px'
-                }}>
-                    <div style={{
-                        background: 'rgba(255, 255, 255, 0.1)',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        textAlign: 'center'
-                    }}>
-                        <div style={{ fontSize: '32px', fontWeight: '700', color: '#fbbf24', marginBottom: '4px' }}>
-                            {aggregatedData.avgTemperature}°C
-                        </div>
-                        <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>
-                            Average Temperature
-                        </div>
-                    </div>
+                <div className="station-summaries-grid">
+                    {stationSummaries.map((station) => (
+                        <div key={station.id} className="station-summary-item">
+                            <div className="station-header">
+                                <h4 className="station-name">{station.name}</h4>
+                            </div>
 
-                    <div style={{
-                        background: 'rgba(255, 255, 255, 0.1)',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        textAlign: 'center'
-                    }}>
-                        <div style={{ fontSize: '32px', fontWeight: '700', color: '#3b82f6', marginBottom: '4px' }}>
-                            {aggregatedData.avgHumidity}%
-                        </div>
-                        <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>
-                            Average Humidity
-                        </div>
-                    </div>
+                            <div className="station-metrics">
+                                <div className="metric-row">
+                                    <div className="metric-item">
+                                        <div className="metric-icon" style={{ color: '#fbbf24' }}>
+                                            🌡️
+                                        </div>
+                                        <div className="metric-content">
+                                            <div className="metric-value" style={{ color: '#fbbf24' }}>
+                                                {station.data.temperature_c ? station.data.temperature_c.toFixed(1) : '—'}°C
+                                            </div>
+                                            <div className="metric-label">Temperature</div>
+                                        </div>
+                                    </div>
 
-                    <div style={{
-                        background: 'rgba(255, 255, 255, 0.1)',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        textAlign: 'center'
-                    }}>
-                        <div style={{ fontSize: '32px', fontWeight: '700', color: '#10b981', marginBottom: '4px' }}>
-                            {aggregatedData.totalRainfall}mm
-                        </div>
-                        <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>
-                            Total Rainfall
-                        </div>
-                    </div>
+                                    <div className="metric-item">
+                                        <div className="metric-icon" style={{ color: '#3b82f6' }}>
+                                            💧
+                                        </div>
+                                        <div className="metric-content">
+                                            <div className="metric-value" style={{ color: '#3b82f6' }}>
+                                                {station.data.humidity_pct ? station.data.humidity_pct.toFixed(1) : '—'}%
+                                            </div>
+                                            <div className="metric-label">Humidity</div>
+                                        </div>
+                                    </div>
+                                </div>
 
-                    <div style={{
-                        background: 'rgba(255, 255, 255, 0.1)',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        textAlign: 'center'
-                    }}>
-                        <div style={{ fontSize: '32px', fontWeight: '700', color: '#8b5cf6', marginBottom: '4px' }}>
-                            {aggregatedData.avgWindSpeed} m/s
+                                <div className="metric-row">
+                                    <div className="metric-item">
+                                        <div className="metric-icon" style={{ color: '#10b981' }}>
+                                            🌧️
+                                        </div>
+                                        <div className="metric-content">
+                                            <div className="metric-value" style={{ color: '#10b981' }}>
+                                                {station.data.rainfall_mm ? station.data.rainfall_mm.toFixed(1) : '—'}mm
+                                            </div>
+                                            <div className="metric-label">Rainfall</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="metric-item">
+                                        <div className="metric-icon" style={{ color: '#8b5cf6' }}>
+                                            💨
+                                        </div>
+                                        <div className="metric-content">
+                                            <div className="metric-value" style={{ color: '#8b5cf6' }}>
+                                                {station.data.windspeed_ms ? station.data.windspeed_ms.toFixed(1) : '—'} m/s
+                                            </div>
+                                            <div className="metric-label">Wind Speed</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>
-                            Average Wind Speed
-                        </div>
-                    </div>
+                    ))}
                 </div>
             </div>
 
@@ -329,6 +354,87 @@ export default function ClimateSummary({ climateData, seriesData }) {
             </div>
 
             <style jsx>{`
+                .station-summaries-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+                    gap: 20px;
+                }
+
+                .station-summary-item {
+                    background: rgba(255, 255, 255, 0.05);
+                    border-radius: 12px;
+                    padding: 20px;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    transition: all 0.3s ease;
+                }
+
+                .station-summary-item:hover {
+                    background: rgba(255, 255, 255, 0.1);
+                    border-color: rgba(255, 255, 255, 0.2);
+                    transform: translateY(-2px);
+                }
+
+                .station-header {
+                    margin-bottom: 16px;
+                }
+
+                .station-name {
+                    color: white;
+                    font-size: 18px;
+                    font-weight: 600;
+                    margin: 0;
+                    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+                }
+
+                .station-metrics {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                }
+
+                .metric-row {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 12px;
+                }
+
+                .metric-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    padding: 10px;
+                    background: rgba(255, 255, 255, 0.05);
+                    border-radius: 8px;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                }
+
+                .metric-icon {
+                    font-size: 16px;
+                    width: 24px;
+                    height: 24px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+
+                .metric-content {
+                    flex: 1;
+                    min-width: 0;
+                }
+
+                .metric-value {
+                    font-size: 16px;
+                    font-weight: 700;
+                    line-height: 1.2;
+                    margin-bottom: 2px;
+                }
+
+                .metric-label {
+                    font-size: 11px;
+                    color: rgba(255, 255, 255, 0.8);
+                    font-weight: 500;
+                }
+
                 .charts-grid {
                     display: grid;
                     grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
@@ -336,6 +442,16 @@ export default function ClimateSummary({ climateData, seriesData }) {
                 }
 
                 @media (max-width: 768px) {
+                    .station-summaries-grid {
+                        grid-template-columns: 1fr;
+                        gap: 16px;
+                    }
+
+                    .metric-row {
+                        grid-template-columns: 1fr;
+                        gap: 8px;
+                    }
+
                     .charts-grid {
                         grid-template-columns: 1fr;
                         gap: 16px;
@@ -343,6 +459,19 @@ export default function ClimateSummary({ climateData, seriesData }) {
                 }
 
                 @media (max-width: 480px) {
+                    .station-summary-item {
+                        padding: 16px;
+                    }
+
+                    .metric-item {
+                        padding: 8px;
+                        gap: 8px;
+                    }
+
+                    .metric-value {
+                        font-size: 14px;
+                    }
+
                     .charts-grid {
                         gap: 12px;
                     }
