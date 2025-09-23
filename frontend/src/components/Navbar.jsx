@@ -20,16 +20,10 @@ export default function Navbar({ lastUpdated }) {
                         Home
                     </Link>
                     <Link
-                        to="/dashboard"
-                        className={`navbar-link ${location.pathname === '/dashboard' ? 'active' : ''}`}
+                        to="/contact"
+                        className={`navbar-link ${location.pathname === '/contact' ? 'active' : ''}`}
                     >
-                        Dashboard
-                    </Link>
-                    <Link
-                        to="/live"
-                        className={`navbar-link ${location.pathname === '/live' ? 'active' : ''}`}
-                    >
-                        Live Data
+                        Contact
                     </Link>
                 </div>
 

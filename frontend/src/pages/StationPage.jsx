@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import { Footer } from '../components/Footer';
 import StatCard from '../components/StatCard';
 import ErrorBanner from '../components/ErrorBanner';
 import { fetchLatest, fetchRange, handleApiError } from '../services/api';
@@ -12,7 +13,6 @@ import RainfallChart from '../components/RainfallChart';
 import HumidityChart from '../components/HumidityChart';
 import PressureChart from '../components/charts/PressureChart';
 import WindSpeedChart from '../components/charts/WindSpeedChart';
-import VisibilityChart from '../components/charts/VisibilityChart';
 import WindRoseChart from '../components/charts/WindRoseChart';
 import GraphBuilder from '../components/GraphBuilder/GraphBuilder';
 import { FIELD_META, DEFAULT_X } from '../utils/fields';
@@ -112,8 +112,8 @@ export default function StationPage() {
     const [graphSel, setGraphSel] = useState({
         xKey: DEFAULT_X,
         yKey: 'TempOut(C)',
-        charts: { temperature: true, rainfall: true, humidity: true, pressure: false, windspeed: false, visibility: false, winddir: true },
-        types: { temperature: 'line', rainfall: 'bar', humidity: 'line', pressure: 'line', windspeed: 'line', visibility: 'line' }
+        charts: { temperature: true, rainfall: true, humidity: true, pressure: false, windspeed: false, winddir: true },
+        types: { temperature: 'line', rainfall: 'bar', humidity: 'line', pressure: 'line', windspeed: 'line' }
     });
 
     const mapped = liveData
@@ -122,8 +122,7 @@ export default function StationPage() {
             humidity: { value: liveData.humidity_pct ?? '—', unit: '%' },
             rainfall: { value: liveData.rainfall_mm ?? '—', unit: 'mm' },
             pressure: { value: liveData.pressure_hpa ?? '—', unit: 'hPa' },
-            windspeed: { value: liveData.windspeed_ms ?? '—', unit: 'm/s' },
-            visibility: { value: '—', unit: 'km' }, // Not available in current API response
+            windspeed: { value: liveData.windspeed_ms ?? '—', unit: 'm/s' }
         }
         : null;
 
@@ -133,7 +132,23 @@ export default function StationPage() {
             <main className="container">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                     <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {getStationName(STATION_ID_MAP[id]) || 'Station'}
+                        {getStationName(STATION_ID_MAP[id]) ||
+                         (id === 'ahm' ? 'Ahmedabad Station' :
+                          id === 'udi' ? 'Udaipur Station' :
+                          id === 'mtabu' ? 'Mount Abu Station' :
+                          `${id.charAt(0).toUpperCase() + id.slice(1)} Station`)}
+                        {!getStationName(STATION_ID_MAP[id]) && !['ahm', 'udi', 'mtabu'].includes(id) && (
+                            <span style={{
+                                fontSize: '12px',
+                                color: '#64748b',
+                                backgroundColor: '#f1f5f9',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontWeight: '500'
+                            }}>
+                                (unverified)
+                            </span>
+                        )}
                         <AvailabilityButton onOpen={() => setShowAvail(true)} />
                     </h2>
                     <Link to="/" style={{ color: 'var(--brand-600)', textDecoration: 'none' }}>&larr; All Stations</Link>
@@ -142,7 +157,7 @@ export default function StationPage() {
                     <ErrorBanner message={liveError} />
                 ) : liveLoading ? (
                     <div className="grid">
-                        {Array.from({ length: 6 }).map((_, i) => (
+                        {Array.from({ length: 5 }).map((_, i) => (
                             <div key={i} className="skeleton" />
                         ))}
                     </div>
@@ -154,7 +169,6 @@ export default function StationPage() {
                             <StatCard icon={FiCloudRain} label="Rainfall" value={mapped?.rainfall.value || '—'} unit={mapped?.rainfall.unit || 'mm'} />
                             <StatCard icon={FiTrendingDown} label="Pressure" value={mapped?.pressure.value || '—'} unit={mapped?.pressure.unit || 'hPa'} />
                             <StatCard icon={FiWind} label="Wind Speed" value={mapped?.windspeed.value || '—'} unit={mapped?.windspeed.unit || 'm/s'} />
-                            <StatCard icon={FiEye} label="Visibility" value={mapped?.visibility.value || '—'} unit={mapped?.visibility.unit || 'km'} />
                         </div>
                         {liveData && (
                         <div style={{ marginTop: 12 }}>
@@ -225,6 +239,7 @@ export default function StationPage() {
                     </>
                 )}
             </main>
+            <Footer />
             {showAvail && (
                 <AvailabilityModal id={id} isOpen={showAvail} onClose={() => setShowAvail(false)} onApplyRange={(start, end) => {
                     // Apply to charts only

@@ -2,12 +2,11 @@ import React from 'react';
 import './styles/theme.css';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import QueryProvider from './providers/QueryProvider';
+import Landing from './pages/Landing';
 import HomePage from './pages/HomePage';
 import StationPage from './pages/StationPage';
-import Dashboard from './pages/Dashboard';
-import RefactoredDashboard from './pages/RefactoredDashboard';
-import LivePage from './pages/LivePage.js';
 import TestPage from './pages/TestPage.js';
+import ContactPage from './pages/ContactPage';
 // ErrorBoundary is now applied globally in index.js. Do not wrap here to avoid duplication.
 
 function App() {
@@ -15,14 +14,11 @@ function App() {
     <QueryProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/home" element={<HomePage />} />
           <Route path="/station/:id" element={<StationPage />} />
-          <Route path="/live" element={<LivePage />} />
           <Route path="/test" element={<TestPage />} />
-          {/* New refactored dashboard */}
-          <Route path="/dashboard" element={<RefactoredDashboard />} />
-          {/* Legacy single-station dashboard (kept for compatibility) */}
-          <Route path="/legacy" element={<Dashboard />} />
+          <Route path="/contact" element={<ContactPage />} />
         </Routes>
       </BrowserRouter>
     </QueryProvider>

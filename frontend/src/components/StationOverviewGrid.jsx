@@ -1,5 +1,5 @@
 import React from 'react';
-import StationCard from './StationCard';
+import { StationCard } from './StationCard';
 
 export default function StationOverviewGrid({ stations, onOpenAvailability }) {
     const images = {

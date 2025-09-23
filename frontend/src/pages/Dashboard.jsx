@@ -76,8 +76,7 @@ export default function Dashboard() {
             humidity: { value: avgHumidity, unit: '%' },
             rainfall: { value: totalRainfall, unit: 'mm' },
             pressure: { value: avgPressure, unit: 'hPa' },
-            windspeed: { value: avgWindSpeed, unit: 'm/s' },
-            visibility: { value: '—', unit: 'km' } // Not available in current data structure
+            windspeed: { value: avgWindSpeed, unit: 'm/s' }
         };
     }, [data]);
 
@@ -91,7 +90,7 @@ export default function Dashboard() {
                     <>
                         {loading ? (
                             <div className="grid" aria-label="loading-cards">
-                                {Array.from({ length: 6 }).map((_, i) => (
+                                {Array.from({ length: 5 }).map((_, i) => (
                                     <div key={i} className="skeleton" aria-hidden="true" />
                                 ))}
                             </div>
@@ -102,7 +101,6 @@ export default function Dashboard() {
                                 <StatCard icon={FiCloudRain} label="Rainfall" value={aggregated.rainfall.value} unit={aggregated.rainfall.unit} />
                                 <StatCard icon={FiTrendingDown} label="Pressure" value={aggregated.pressure.value} unit={aggregated.pressure.unit} />
                                 <StatCard icon={FiWind} label="Wind Speed" value={aggregated.windspeed.value} unit={aggregated.windspeed.unit} />
-                                <StatCard icon={FiEye} label="Visibility" value={aggregated.visibility.value} unit={aggregated.visibility.unit} />
                             </div>
                         )}
                         <PlaceholderCharts />

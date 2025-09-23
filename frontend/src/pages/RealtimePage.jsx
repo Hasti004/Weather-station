@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import Navbar from '../components/Navbar';
+import { Footer } from '../components/Footer';
 import RealtimeStream from '../components/RealtimeStream';
 import { useObservatories } from '../hooks/useObservatories';
 
@@ -65,6 +66,7 @@ export default function RealtimePage() {
 
                 <RealtimeStream stationId={selectedStation} />
             </main>
+            <Footer />
         </div>
     );
 }
