@@ -3,7 +3,7 @@ import dayjs from 'dayjs';
 import { useApiAvailability } from '../../hooks/useApiAvailability';
 import CalendarHeatmap from './CalendarHeatmap';
 import MissingDaysList from './MissingDaysList';
-import { exportWeatherDataToCSV, validateDateRange } from '../../utils/exportUtils';
+import { exportCsv2 } from '../../services/api';
 import Toast from '../Toast';
 import '../../styles/availability.css';
 
@@ -15,8 +15,20 @@ export default function AvailabilityModal({ id, isOpen, onClose, onApplyRange })
     const [sel, setSel] = useState({ start: null, end: null });
     const [exportLoading, setExportLoading] = useState(false);
     const [toast, setToast] = useState(null);
+    const [debouncedMonth, setDebouncedMonth] = useState(dayjs().month());
+    const [debouncedYear, setDebouncedYear] = useState(dayjs().year());
 
-    // Use API-based availability hook
+    // Debounce month/year changes
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedMonth(month);
+            setDebouncedYear(year);
+        }, 250);
+
+        return () => clearTimeout(timer);
+    }, [month, year]);
+
+    // Use API-based availability hook with debounced values
     const {
         loading,
         error,
@@ -25,7 +37,11 @@ export default function AvailabilityModal({ id, isOpen, onClose, onApplyRange })
         maxDate,
         stationName,
         getDataForRange
-    } = useApiAvailability(id, month, year);
+    } = useApiAvailability(id, debouncedMonth, debouncedYear);
+
+    // Get numeric station ID
+    const STATION_ID_MAP = { ahm: 2, udi: 1, mtabu: 3 };
+    const numericStationId = STATION_ID_MAP[id];
 
     // Update default month/year when data loads
     React.useEffect(() => {
@@ -77,20 +93,24 @@ export default function AvailabilityModal({ id, isOpen, onClose, onApplyRange })
             const startDate = dayjs(sel.start).format('YYYY-MM-DD');
             const endDate = dayjs(sel.end).format('YYYY-MM-DD');
 
-            const data = await getDataForRange(startDate, endDate);
-            const result = exportWeatherDataToCSV(data, stationName || STATION_NAMES[id], startDate, endDate, 'selected');
+            // Use the new backend export endpoint
+            const alias = id === 'udi' ? 'udaipur' : id === 'ahm' ? 'ahmedabad' : 'mountabu';
+            const blob = await exportCsv2(alias, startDate, endDate);
 
-            if (result.success) {
-                setToast({
-                    message: `Export complete: ${result.filename}`,
-                    type: 'success'
-                });
-            } else {
-                setToast({
-                    message: `Export failed: ${result.error}`,
-                    type: 'error'
-                });
-            }
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${stationName || STATION_NAMES[id]}_${startDate}_to_${endDate}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
+            setToast({
+                message: `Export complete: ${stationName || STATION_NAMES[id]}_${startDate}_to_${endDate}.csv`,
+                type: 'success'
+            });
         } catch (err) {
             setToast({
                 message: `Export failed: ${err.message}`,
@@ -99,7 +119,7 @@ export default function AvailabilityModal({ id, isOpen, onClose, onApplyRange })
         } finally {
             setExportLoading(false);
         }
-    }, [sel.start, sel.end, getDataForRange, stationName, id]);
+    }, [sel.start, sel.end, numericStationId, stationName, id]);
 
     const exportLast7Days = useCallback(async () => {
         setExportLoading(true);
@@ -107,20 +127,23 @@ export default function AvailabilityModal({ id, isOpen, onClose, onApplyRange })
             const endDate = dayjs().format('YYYY-MM-DD');
             const startDate = dayjs().subtract(7, 'days').format('YYYY-MM-DD');
 
-            const data = await getDataForRange(startDate, endDate);
-            const result = exportWeatherDataToCSV(data, stationName || STATION_NAMES[id], startDate, endDate, 'week');
+            const alias = id === 'udi' ? 'udaipur' : id === 'ahm' ? 'ahmedabad' : 'mountabu';
+            const blob = await exportCsv2(alias, startDate, endDate);
 
-            if (result.success) {
-                setToast({
-                    message: `Export complete: ${result.filename}`,
-                    type: 'success'
-                });
-            } else {
-                setToast({
-                    message: `Export failed: ${result.error}`,
-                    type: 'error'
-                });
-            }
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${stationName || STATION_NAMES[id]}_last_7_days.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
+            setToast({
+                message: `Export complete: ${stationName || STATION_NAMES[id]}_last_7_days.csv`,
+                type: 'success'
+            });
         } catch (err) {
             setToast({
                 message: `Export failed: ${err.message}`,
@@ -129,7 +152,7 @@ export default function AvailabilityModal({ id, isOpen, onClose, onApplyRange })
         } finally {
             setExportLoading(false);
         }
-    }, [getDataForRange, stationName, id]);
+    }, [numericStationId, stationName, id]);
 
     const exportWholeMonth = useCallback(async () => {
         setExportLoading(true);
@@ -137,20 +160,23 @@ export default function AvailabilityModal({ id, isOpen, onClose, onApplyRange })
             const startDate = dayjs(new Date(year, month, 1)).format('YYYY-MM-DD');
             const endDate = dayjs(new Date(year, month + 1, 0)).format('YYYY-MM-DD');
 
-            const data = await getDataForRange(startDate, endDate);
-            const result = exportWeatherDataToCSV(data, stationName || STATION_NAMES[id], startDate, endDate, 'month');
+            const alias = id === 'udi' ? 'udaipur' : id === 'ahm' ? 'ahmedabad' : 'mountabu';
+            const blob = await exportCsv2(alias, startDate, endDate);
 
-            if (result.success) {
-                setToast({
-                    message: `Export complete: ${result.filename}`,
-                    type: 'success'
-                });
-            } else {
-                setToast({
-                    message: `Export failed: ${result.error}`,
-                    type: 'error'
-                });
-            }
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${stationName || STATION_NAMES[id]}_${year}-${(month + 1).toString().padStart(2, '0')}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
+            setToast({
+                message: `Export complete: ${stationName || STATION_NAMES[id]}_${year}-${(month + 1).toString().padStart(2, '0')}.csv`,
+                type: 'success'
+            });
         } catch (err) {
             setToast({
                 message: `Export failed: ${err.message}`,
@@ -159,7 +185,7 @@ export default function AvailabilityModal({ id, isOpen, onClose, onApplyRange })
         } finally {
             setExportLoading(false);
         }
-    }, [getDataForRange, stationName, id, month, year]);
+    }, [numericStationId, stationName, id, month, year]);
 
     const exportAllData = useCallback(async () => {
         setExportLoading(true);
@@ -171,20 +197,23 @@ export default function AvailabilityModal({ id, isOpen, onClose, onApplyRange })
             const startDate = dayjs(minDate).format('YYYY-MM-DD');
             const endDate = dayjs(maxDate).format('YYYY-MM-DD');
 
-            const data = await getDataForRange(startDate, endDate);
-            const result = exportWeatherDataToCSV(data, stationName || STATION_NAMES[id], startDate, endDate, 'all');
+            const alias = id === 'udi' ? 'udaipur' : id === 'ahm' ? 'ahmedabad' : 'mountabu';
+            const blob = await exportCsv2(alias, startDate, endDate);
 
-            if (result.success) {
-                setToast({
-                    message: `Export complete: ${result.filename}`,
-                    type: 'success'
-                });
-            } else {
-                setToast({
-                    message: `Export failed: ${result.error}`,
-                    type: 'error'
-                });
-            }
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${stationName || STATION_NAMES[id]}_all_data.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
+            setToast({
+                message: `Export complete: ${stationName || STATION_NAMES[id]}_all_data.csv`,
+                type: 'success'
+            });
         } catch (err) {
             setToast({
                 message: `Export failed: ${err.message}`,
@@ -193,7 +222,21 @@ export default function AvailabilityModal({ id, isOpen, onClose, onApplyRange })
         } finally {
             setExportLoading(false);
         }
-    }, [getDataForRange, stationName, id, minDate, maxDate]);
+    }, [numericStationId, stationName, id, minDate, maxDate]);
+
+    // Handle ESC key to close modal
+    React.useEffect(() => {
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape' && isOpen) {
+                onClose();
+            }
+        };
+
+        if (isOpen) {
+            document.addEventListener('keydown', handleKeyDown);
+            return () => document.removeEventListener('keydown', handleKeyDown);
+        }
+    }, [isOpen, onClose]);
 
     // Clear toast after 3 seconds
     React.useEffect(() => {
@@ -206,7 +249,17 @@ export default function AvailabilityModal({ id, isOpen, onClose, onApplyRange })
     if (!isOpen) return null;
 
     return (
-        <div className="av-backdrop" role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 50 }}>
+        <div
+            className="av-backdrop"
+            role="dialog"
+            aria-modal="true"
+            style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 50 }}
+            onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                    onClose();
+                }
+            }}
+        >
             <div className="av-modal" style={{ width: 880, maxWidth: '90vw', background: '#fff', borderRadius: 16 }}>
                 <div className="av-header">
                     <div style={{ fontWeight: 600 }}>{`Data Availability — ${stationName || STATION_NAMES[id] || ''}`}</div>

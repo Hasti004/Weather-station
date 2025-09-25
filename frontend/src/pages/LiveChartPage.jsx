@@ -102,7 +102,19 @@ export default function LiveChartPage() {
             <Navbar lastUpdated={lastUpdated} />
             <main className="container">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <h2 style={{ margin: 0 }}>Live Charts - {getStationName(STATION_ID_MAP[selectedStation]) || 'Station'}</h2>
+                    <h2 style={{ margin: 0 }}>Live Charts - {(() => {
+                        const stationId = STATION_ID_MAP[selectedStation];
+                        const stationName = getStationName(stationId);
+                        if (stationName === `Station ${stationId}`) {
+                            const stationMap = {
+                                1: 'Udaipur',
+                                2: 'Ahmedabad',
+                                3: 'Mount Abu'
+                            };
+                            return stationMap[stationId] || 'Station';
+                        }
+                        return stationName || 'Station';
+                    })()}</h2>
                     <Link to="/" style={{ color: 'var(--brand-600)', textDecoration: 'none' }}>&larr; All Stations</Link>
                 </div>
 
@@ -123,9 +135,20 @@ export default function LiveChartPage() {
                                 minWidth: '120px'
                             }}
                         >
-                            {Object.entries(STATION_ID_MAP).map(([key, stationId]) => (
-                                <option key={key} value={key}>{getStationName(stationId) || key}</option>
-                            ))}
+                            {Object.entries(STATION_ID_MAP).map(([key, stationId]) => {
+                                const stationName = getStationName(stationId);
+                                const displayName = stationName === `Station ${stationId}` ?
+                                    (() => {
+                                        const stationMap = {
+                                            1: 'Udaipur',
+                                            2: 'Ahmedabad',
+                                            3: 'Mount Abu'
+                                        };
+                                        return stationMap[stationId] || key;
+                                    })() :
+                                    (stationName || key);
+                                return <option key={key} value={key}>{displayName}</option>;
+                            })}
                         </select>
                     </div>
                     <div>

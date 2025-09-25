@@ -211,7 +211,18 @@ export default function RealtimeStream({ stationId = null, showCharts = true }) 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '16px' }}>
                 <div>
                     <h3 style={{ fontSize: '18px', fontWeight: '600', margin: '0 0 4px 0', color: '#111827' }}>
-                        {getStationName(reading.station_id) || `Station ${reading.station_id}`}
+                        {(() => {
+                            const stationName = getStationName(reading.station_id);
+                            if (stationName === `Station ${reading.station_id}`) {
+                                const stationMap = {
+                                    1: 'Udaipur',
+                                    2: 'Ahmedabad',
+                                    3: 'Mount Abu'
+                                };
+                                return stationMap[reading.station_id] || stationName;
+                            }
+                            return stationName;
+                        })()}
                     </h3>
                     <p style={{ fontSize: '14px', color: '#6b7280', margin: '0' }}>
                         {getStationLocation(reading.station_id) || 'Weather Station'}
@@ -319,7 +330,18 @@ export default function RealtimeStream({ stationId = null, showCharts = true }) 
             }}>
                 <p style={{ margin: '0' }}>
                     Real-time data stream • Updates automatically •
-                    {stationId ? ` Station: ${getStationName(stationId) || stationId}` : ' All stations'}
+                    {stationId ? (() => {
+                        const stationName = getStationName(stationId);
+                        if (stationName === `Station ${stationId}`) {
+                            const stationMap = {
+                                1: 'Udaipur',
+                                2: 'Ahmedabad',
+                                3: 'Mount Abu'
+                            };
+                            return ` Station: ${stationMap[stationId] || stationId}`;
+                        }
+                        return ` Station: ${stationName}`;
+                    })() : ' All stations'}
                 </p>
             </div>
         </div>

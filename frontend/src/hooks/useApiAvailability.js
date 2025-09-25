@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
-import { fetchRange, fetchObservatories } from '../services/api';
+import { fetchAvailability, fetchRange, fetchObservatories } from '../services/api';
 
 // Station ID mapping
 const STATION_ID_MAP = {
@@ -59,10 +59,60 @@ export function useApiAvailability(stationId, month, year) {
             setError(null);
 
             try {
-                // Fetch data for the month
+                // Try the new availability endpoint first
+                try {
+                    // Convert 0-based month to 1-based for backend
+                    const backendMonth = month + 1;
+                    const availabilityResponse = await fetchAvailability(numericStationId, year, backendMonth);
+
+                    if (availabilityResponse && availabilityResponse.days) {
+                        const { days } = availabilityResponse;
+
+                        // Convert to Set of available dates
+                        const dates = new Set();
+                        days.forEach(({ day, status }) => {
+                            if (status === 'available') {
+                                const dateStr = `${year}-${backendMonth.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+                                dates.add(dateStr);
+                            }
+                        });
+
+                        // Get station name from observatories
+                        try {
+                            const observatoriesResponse = await fetchObservatories();
+                            if (observatoriesResponse.observatories && observatoriesResponse.observatories.length > 0) {
+                                const station = observatoriesResponse.observatories.find(s => s.station_id === numericStationId);
+                                if (station) {
+                                    setStationName(station.station_name);
+                                }
+                            }
+                        } catch (err) {
+                            console.warn('Failed to fetch station name:', err);
+                            setStationName(stationId.toUpperCase());
+                        }
+
+                        // Cache the result
+                        const cacheData = {
+                            availableDates: dates,
+                            minDate: null, // Will be set by overall range loading
+                            maxDate: null, // Will be set by overall range loading
+                            stationName: stationName || stationId.toUpperCase()
+                        };
+                        availabilityCache.set(cacheKey, cacheData);
+
+                        setAvailableDates(dates);
+                        setError(null);
+                        setLoading(false);
+                        return;
+                    }
+                } catch (availabilityErr) {
+                    console.warn('Availability endpoint failed, falling back to range endpoint:', availabilityErr);
+                }
+
+                // Fallback to range endpoint
                 const response = await fetchRange(numericStationId, dateRange.start, dateRange.end);
 
-                if (!response.success || !response.data) {
+                if (!response.data || response.data.length === 0) {
                     console.warn(`No data available for station ${numericStationId} in range ${dateRange.start} to ${dateRange.end}`);
                     setError('No data available for this range');
                     setAvailableDates(new Set());
@@ -88,10 +138,10 @@ export function useApiAvailability(stationId, month, year) {
                 // Get station name from observatories
                 try {
                     const observatoriesResponse = await fetchObservatories();
-                    if (observatoriesResponse.success && observatoriesResponse.data) {
-                        const station = observatoriesResponse.data.find(s => s.station_id === numericStationId);
+                    if (observatoriesResponse.observatories && observatoriesResponse.observatories.length > 0) {
+                        const station = observatoriesResponse.observatories.find(s => s.station_id === numericStationId);
                         if (station) {
-                            setStationName(station.name);
+                            setStationName(station.station_name);
                         }
                     }
                 } catch (err) {
@@ -115,7 +165,7 @@ export function useApiAvailability(stationId, month, year) {
 
             } catch (err) {
                 console.error('Error loading availability:', err);
-                setError('No data available for this range');
+                setError('Failed to fetch data. Please try again.');
                 setAvailableDates(new Set());
             } finally {
                 setLoading(false);
@@ -141,7 +191,7 @@ export function useApiAvailability(stationId, month, year) {
                     now.format('YYYY-MM-DD')
                 );
 
-                if (response.success && response.data && response.data.length > 0) {
+                if (response.data && response.data.length > 0) {
                     let min = null;
                     let max = null;
 
@@ -182,7 +232,7 @@ export function useApiAvailability(stationId, month, year) {
         getDataForRange: async (startDate, endDate) => {
             try {
                 const response = await fetchRange(numericStationId, startDate, endDate);
-                return response.success ? response.data : [];
+                return response.data || [];
             } catch (err) {
                 console.error('Error fetching data for range:', err);
                 return [];

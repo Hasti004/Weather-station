@@ -112,6 +112,74 @@ export function connectStream(stationId, onMessage) {
 }
 
 /**
+ * Fetch daily availability for a station in a specific month
+ * @param {number} stationId - Station ID (1, 2, 3)
+ * @param {number} year - Year (e.g., 2025)
+ * @param {number} month - Month (1-12)
+ * @returns {Promise<Object>} Response with daily availability data
+ */
+export async function fetchAvailability(stationId, year, month) {
+  const params = new URLSearchParams({
+    station_id: stationId.toString(),
+    year: year.toString(),
+    month: month.toString()
+  });
+
+  const res = await fetch(`${API_BASE}/availability?${params}`);
+  if (!res.ok) {
+    throw new Error(`HTTP error! status: ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Export CSV data for a date range
+ * @param {number} stationId - Station ID (1, 2, 3)
+ * @param {string} start - Start date in YYYY-MM-DD format
+ * @param {string} end - End date in YYYY-MM-DD format
+ * @returns {Promise<Blob>} CSV file blob
+ */
+export async function exportCSV(stationId, start, end) {
+  const params = new URLSearchParams({
+    station_id: stationId.toString(),
+    start: start,
+    end: end
+  });
+
+  const res = await fetch(`${API_BASE}/export/csv?${params}`);
+  if (!res.ok) {
+    throw new Error(`HTTP error! status: ${res.status}`);
+  }
+  return res.blob();
+}
+
+/**
+ * New CSV export via /download/csv
+ * @param {string|number} stationIdOrAlias - 1/2/3 or udaipur/ahmedabad/mountabu
+ * @param {string} startYMD - YYYY-MM-DD
+ * @param {string} endYMD - YYYY-MM-DD
+ * @returns {Promise<Blob>} CSV file blob
+ */
+export async function exportCsv2(stationIdOrAlias, startYMD, endYMD) {
+  const params = new URLSearchParams({
+    station_id: String(stationIdOrAlias),
+    start: startYMD,
+    end: endYMD
+  });
+
+  const res = await fetch(`${API_BASE}/download/csv?${params}`);
+  if (!res.ok) {
+    try {
+      const err = await res.json();
+      throw new Error(err.detail || `HTTP error! status: ${res.status}`);
+    } catch (_) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+  }
+  return res.blob();
+}
+
+/**
  * Utility function to handle API errors consistently
  * @param {Error} error - Error object
  * @returns {string} User-friendly error message

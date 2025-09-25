@@ -114,7 +114,17 @@ const LiveDashboard: React.FC = () => {
   };
 
   const getStationDisplayName = (stationId: number): string => {
-    return getStationName(stationId);
+    const stationName = getStationName(stationId);
+    // Fallback mapping if API doesn't return station names
+    if (stationName === `Station ${stationId}`) {
+      const stationMap = {
+        1: 'Udaipur',
+        2: 'Ahmedabad',
+        3: 'Mount Abu'
+      };
+      return stationMap[stationId] || stationName;
+    }
+    return stationName;
   };
 
   // Always return valid JSX - never null

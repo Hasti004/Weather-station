@@ -132,11 +132,22 @@ export default function StationPage() {
             <main className="container">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                     <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {getStationName(STATION_ID_MAP[id]) ||
-                         (id === 'ahm' ? 'Ahmedabad Station' :
-                          id === 'udi' ? 'Udaipur Station' :
-                          id === 'mtabu' ? 'Mount Abu Station' :
-                          `${id.charAt(0).toUpperCase() + id.slice(1)} Station`)}
+                        {(() => {
+                            const stationId = STATION_ID_MAP[id];
+                            const stationName = getStationName(stationId);
+                            if (stationName === `Station ${stationId}`) {
+                                const stationMap = {
+                                    1: 'Udaipur',
+                                    2: 'Ahmedabad',
+                                    3: 'Mount Abu'
+                                };
+                                return stationMap[stationId] || 'Unknown Station';
+                            }
+                            return stationName || (id === 'ahm' ? 'Ahmedabad' :
+                                  id === 'udi' ? 'Udaipur' :
+                                  id === 'mtabu' ? 'Mount Abu' :
+                                  `${id.charAt(0).toUpperCase() + id.slice(1)}`);
+                        })()}
                         {!getStationName(STATION_ID_MAP[id]) && !['ahm', 'udi', 'mtabu'].includes(id) && (
                             <span style={{
                                 fontSize: '12px',
