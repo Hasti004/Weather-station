@@ -56,7 +56,7 @@ export default function WindRoseChart({ rows, weightedDefault = false }) {
                     Weight by wind speed
                 </label>
             </div>
-            <div style={{ height: 340 }}>
+            <div style={{ height: 400, padding: '20px 0' }}>
                 <PolarArea data={data} options={options} />
             </div>
         </div>

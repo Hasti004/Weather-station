@@ -56,6 +56,7 @@ export async function getLatest() {
     const slug = r.slug || mapStationMeta(r.station_id).alias;
     const name = r.station_name || mapStationMeta(r.station_id).name;
 
+
     return {
       slug,
       station_id: r.station_id,

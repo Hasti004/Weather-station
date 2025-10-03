@@ -18,7 +18,6 @@ import WindRoseChart from '../components/charts/WindRoseChart';
 import GraphBuilder from '../components/GraphBuilder/GraphBuilder';
 import { FIELD_META, DEFAULT_X } from '../utils/fields';
 import { buildSeries } from '../utils/aggregate';
-import AvailabilityButton from '../components/availability/AvailabilityButton';
 import AvailabilityModal from '../components/availability/AvailabilityModal';
 import { FiThermometer, FiDroplet, FiCloudRain, FiTrendingDown, FiWind } from 'react-icons/fi';
 
@@ -126,10 +125,55 @@ export default function StationPage() {
             loadArchiveData();
         }
     }, [id, resolvedRange]);
+
+    // Load initial data on component mount
+    useEffect(() => {
+        if (!alias) return;
+
+        const loadInitialData = async () => {
+            setArchiveLoading(true);
+            setArchiveError(null);
+
+            try {
+                const stationId = STATION_ID_MAP[alias];
+
+                // Format dates properly for the API
+                const formatDate = (date) => {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const hours = String(date.getHours()).padStart(2, '0');
+                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                    const seconds = String(date.getSeconds()).padStart(2, '0');
+                    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+                };
+
+                // Load last 30 days by default for better wind rose visualization
+                const end = new Date();
+                const start = new Date();
+                start.setDate(start.getDate() - 30);
+
+                const startStr = formatDate(start);
+                const endStr = formatDate(end);
+
+                console.log(`[StationPage] Loading initial data: ${startStr} to ${endStr}`);
+                const result = await fetchRange(stationId, startStr, endStr);
+                setArchiveData(result.data || []);
+            } catch (err) {
+                console.error('[StationPage] Initial data load error:', err);
+                setArchiveError(handleApiError(err));
+            } finally {
+                setArchiveLoading(false);
+            }
+        };
+
+        loadInitialData();
+    }, [alias]);
+
     const [graphSel, setGraphSel] = useState({
         xKey: DEFAULT_X,
         yKey: 'TempOut(C)',
-        charts: { temperature: true, rainfall: true, humidity: true, pressure: false, windspeed: false, winddir: true },
+        charts: { temperature: true, rainfall: true, humidity: true, pressure: false, windspeed: true, winddir: true },
         types: { temperature: 'line', rainfall: 'bar', humidity: 'line', pressure: 'line', windspeed: 'line' }
     });
 
@@ -177,9 +221,47 @@ export default function StationPage() {
                                 (unverified)
                             </span>
                         )}
-                        <AvailabilityButton onOpen={() => setShowAvail(true)} />
                     </h2>
-                    <Link to="/" style={{ color: 'var(--brand-600)', textDecoration: 'none' }}>&larr; All Stations</Link>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <Link to="/" style={{ color: 'var(--brand-600)', textDecoration: 'none' }}>&larr; All Stations</Link>
+                        <button
+                            onClick={() => setShowAvail(true)}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '8px 16px',
+                                backgroundColor: 'var(--brand-600)',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                                fontWeight: '500',
+                                transition: 'background-color 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.target.style.backgroundColor = 'var(--brand-700)'}
+                            onMouseLeave={(e) => e.target.style.backgroundColor = 'var(--brand-600)'}
+                            title="View or download historical data"
+                            aria-label="View or download historical data"
+                        >
+                            📅 View / Download Data
+                        </button>
+                    </div>
+                    <style jsx>{`
+                        @media (max-width: 640px) {
+                            div[style*="display: flex"][style*="alignItems: center"][style*="justifyContent: space-between"] {
+                                flex-direction: column !important;
+                                align-items: flex-start !important;
+                                gap: 12px !important;
+                            }
+                            div[style*="display: flex"][style*="alignItems: center"][style*="gap: 12px"] {
+                                flex-direction: column !important;
+                                align-items: flex-start !important;
+                                gap: 8px !important;
+                            }
+                        }
+                    `}</style>
                 </div>
                 {liveError ? (
                     <ErrorBanner message={liveError} />
@@ -198,30 +280,11 @@ export default function StationPage() {
                             <StatCard icon={FiTrendingDown} label="Pressure" value={mapped?.pressure.value || '—'} unit={mapped?.pressure.unit || 'hPa'} />
                             <StatCard icon={FiWind} label="Wind Speed" value={mapped?.windspeed.value || '—'} unit={mapped?.windspeed.unit || 'm/s'} />
                         </div>
-                        {liveData && (
                         <div style={{ marginTop: 12 }}>
-                            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-                                <tbody>
-                                    {[
-                                            ['Temperature', `${liveData.temperature_c ?? '—'} °C`],
-                                            ['Humidity', `${liveData.humidity_pct ?? '—'} %`],
-                                            ['Rainfall', `${liveData.rainfall_mm ?? '—'} mm`],
-                                            ['Pressure', `${liveData.pressure_hpa ?? '—'} hPa`],
-                                            ['Wind Speed', `${liveData.windspeed_ms ?? '—'} m/s`],
-                                            ['Wind Direction', `${liveData.wind_dir ?? '—'}`],
-                                    ].map((row, idx) => (
-                                        <tr key={idx}>
-                                            <td style={{ padding: '8px 8px', color: '#334155' }}>{row[0]}</td>
-                                            <td style={{ padding: '8px 8px', fontWeight: 600 }}>{row[1]}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                                <div style={{ fontSize: 12, color: '#64748B', marginTop: 6 }}>Last updated: {lastUpdated ? lastUpdated.toLocaleString() : '—'}</div>
-                        </div>
-                        )}
-                        <div style={{ marginTop: 12 }}>
-                            <GraphBuilder availableFields={FIELD_META} hasWindDir={Array.isArray(archiveData) && archiveData.some(r => Number.isFinite(r.wind_dir))} selection={graphSel} onChange={setGraphSel} />
+                            <div style={{ marginBottom: 12 }}>
+                                <TimeFilterToolbar value={filter} onChange={setFilter} />
+                            </div>
+                            <GraphBuilder availableFields={FIELD_META} hasWindDir={true} selection={graphSel} onChange={setGraphSel} />
                         </div>
                         {archiveError ? (
                             <ErrorBanner message={archiveError} />
@@ -257,9 +320,15 @@ export default function StationPage() {
                                         <WindSpeedChart data={buildSeries((archiveData || []).map(r => ({ dt: new Date(r.reading_ts), windspeed_ms: r.windspeed_ms })), 'day', 'daily', 'windspeed_ms', 'avg')} unit="m/s" />
                                     </ChartPanel>
                                 )}
-                                {graphSel.charts.winddir && (Array.isArray(archiveData) && archiveData.some(r => Number.isFinite(r.wind_dir))) && (
+                                {graphSel.charts.winddir && (
                                     <ChartPanel title="Wind Rose">
-                                        <WindRoseChart rows={archiveData.map(r => ({ WindDir: r.wind_dir, WindSpeed: r.windspeed_ms }))} />
+                                        {archiveData && archiveData.length > 0 ? (
+                                            <WindRoseChart rows={archiveData.map(r => ({ WindDir: r.wind_dir, 'WindSpeed(m/s)': r.windspeed_ms }))} />
+                                        ) : (
+                                            <div style={{ padding: 20, textAlign: 'center', color: '#64748B' }}>
+                                                Select a time range to load wind direction data
+                                            </div>
+                                        )}
                                     </ChartPanel>
                                 )}
                             </>

@@ -44,9 +44,9 @@ export default function ChartPanel({ title, avgLabel, avgValue, unit, rangeText,
                     <button aria-label="Reset Zoom" onClick={onResetZoom} title="Reset Zoom" style={{ border: '1px solid var(--panel-border)', color: 'var(--ink-700)', borderRadius: 8, padding: '6px 8px', background: 'white', cursor: 'pointer' }}>⤾</button>
                 </div>
             </div>
-            <div className="placeholder-box" style={{ padding: 12, minHeight: 340 }}>
+            <div className="placeholder-box" style={{ padding: 12, minHeight: title === 'Wind Rose' ? 460 : 340 }}>
                 {hasData ? content : (
-                    <div style={{ height: 316, display: 'grid', placeItems: 'center', color: 'var(--axis)' }}>No data in this range</div>
+                    <div style={{ height: title === 'Wind Rose' ? 436 : 316, display: 'grid', placeItems: 'center', color: 'var(--axis)' }}>No data in this range</div>
                 )}
             </div>
         </section>
