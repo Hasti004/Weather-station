@@ -1,112 +1,125 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
-import StationOverviewGrid from '../components/StationOverviewGrid';
+import StatCard from '../components/StatCard';
 import AvailabilityModal from '../components/availability/AvailabilityModal';
-import { fetchLatest, fetchSeries } from '../services/api';
+import { fetchSeries } from '../services/api';
+import { useLiveAll } from '../live/LiveDataProvider';
+import { getLatest } from '../services/api';
 import ClimateSummary from '../components/ClimateSummary';
 import { Footer } from '../components/Footer';
-
-async function fetchStation(url) {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`Failed to fetch ${url}`);
-    const text = (await res.text()).trim();
-    const parts = text.split(',').map((p) => p.trim());
-    if (parts.length !== 6) return null;
-    const nums = parts.map((p) => (Number.isFinite(Number(p)) ? Number(p) : null));
-    return {
-        temperature_c: nums[0],
-        humidity_pct: nums[1],
-        rainfall_mm: nums[2],
-        pressure_hpa: nums[3],
-        windspeed_ms: nums[4],
-    };
-}
+import { FiThermometer, FiDroplet, FiCloudRain, FiTrendingDown, FiWind } from 'react-icons/fi';
 
 export default function HomePage() {
-    const [loading, setLoading] = useState(true);
-    const [stations, setStations] = useState([]);
-    const [lastUpdated, setLastUpdated] = useState(null);
-    const [error, setError] = useState(null);
+    const { list, bySlug, lastUpdated, loading, error } = useLiveAll();
     const [openFor, setOpenFor] = useState(null);
     const [climateData, setClimateData] = useState(null);
     const [seriesData, setSeriesData] = useState({});
+    const [manualRefresh, setManualRefresh] = useState(false);
 
+    // Debug logging
+    console.log('[HomePage] Live data:', {
+        stations: Object.keys(bySlug).length,
+        loading,
+        error: !!error,
+        lastUpdated: lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : 'never',
+        stationData: Object.keys(bySlug).map(slug => ({
+            slug,
+            temp: bySlug[slug]?.temperature_c,
+            humidity: bySlug[slug]?.humidity_pct,
+            timestamp: bySlug[slug]?.reading_ts
+        })),
+        rawData: list
+    });
+
+    // Additional debugging for data flow
+    console.log('[HomePage] bySlug object:', bySlug);
+    console.log('[HomePage] list array:', list);
+    console.log('[HomePage] loading state:', loading);
+    console.log('[HomePage] error state:', error);
+
+    // Get the three main stations from live data
+    const ahm = bySlug.ahm;
+    const udi = bySlug.udi;
+    const mtabu = bySlug.mtabu;
+
+    // Convert live data to the format expected by the UI
+    const stations = [
+        ahm ? {
+            id: 'ahm',
+            name: ahm.name || 'Ahmedabad',
+            metrics: {
+                temperature_c: ahm.temperature_c,
+                humidity_pct: ahm.humidity_pct,
+                rainfall_mm: ahm.rainfall_mm,
+                pressure_hpa: ahm.pressure_hpa,
+                windspeed_ms: ahm.windspeed_ms,
+            }
+        } : null,
+        udi ? {
+            id: 'udi',
+            name: udi.name || 'Udaipur',
+            metrics: {
+                temperature_c: udi.temperature_c,
+                humidity_pct: udi.humidity_pct,
+                rainfall_mm: udi.rainfall_mm,
+                pressure_hpa: udi.pressure_hpa,
+                windspeed_ms: udi.windspeed_ms,
+            }
+        } : null,
+        mtabu ? {
+            id: 'mtabu',
+            name: mtabu.name || 'Mount Abu',
+            metrics: {
+                temperature_c: mtabu.temperature_c,
+                humidity_pct: mtabu.humidity_pct,
+                rainfall_mm: mtabu.rainfall_mm,
+                pressure_hpa: mtabu.pressure_hpa,
+                windspeed_ms: mtabu.windspeed_ms,
+            }
+        } : null
+    ].filter(Boolean);
+
+    console.log('[HomePage] Processed stations:', stations);
+
+    // Debug temperature values specifically
+    console.log('[HomePage] Temperature values:', {
+        ahm_temp: ahm?.temperature_c,
+        udi_temp: udi?.temperature_c,
+        mtabu_temp: mtabu?.temperature_c,
+        stations_temp: stations.map(s => ({ id: s.id, temp: s.metrics?.temperature_c }))
+    });
+
+    // Load climate data and series data on mount
     useEffect(() => {
         let mounted = true;
         (async () => {
             try {
-                // Try to fetch from API first, fallback to file-based
-                try {
-                    const latestResult = await fetchLatest();
-                    if (latestResult && latestResult.data) {
-                        const apiStations = latestResult.data.map(station => ({
-                            id: station.station_id === 1 ? 'udi' : station.station_id === 2 ? 'ahm' : 'mtabu',
-                            name: station.station_name || (station.station_id === 1 ? 'Udaipur' : station.station_id === 2 ? 'Ahmedabad' : 'Mount Abu'),
-                            metrics: {
-                                temperature_c: station.temperature_c,
-                                humidity_pct: station.humidity_pct,
-                                rainfall_mm: station.rainfall_mm,
-                                pressure_hpa: station.pressure_hpa,
-                                windspeed_ms: station.windspeed_ms,
-                            }
-                        }));
+                // Set climate data from live data
+                setClimateData(list);
 
-                        if (!mounted) return;
-                        setStations(apiStations);
-                        setClimateData(latestResult.data);
-                        setLastUpdated(new Date());
-
-                        // Fetch series data for charts
-                        const seriesPromises = apiStations.map(async (station) => {
-                            try {
-                                const stationId = station.id === 'udi' ? 1 : station.id === 'ahm' ? 2 : 3;
-                                const seriesResult = await fetchSeries(stationId, 1440); // 24 hours
-                                return { stationId, data: seriesResult.data || [] };
-                            } catch (e) {
-                                console.warn(`Failed to fetch series for ${station.name}:`, e);
-                                return { stationId: station.id, data: [] };
-                            }
-                        });
-
-                        const seriesResults = await Promise.all(seriesPromises);
-                        const seriesMap = {};
-                        seriesResults.forEach(({ stationId, data }) => {
-                            seriesMap[stationId] = data;
-                        });
-                        setSeriesData(seriesMap);
-
-                        setLoading(false);
-                        return;
+                // Load series data for charts
+                const seriesPromises = stations.map(async (station) => {
+                    try {
+                        const stationId = station.id === 'udi' ? 1 : station.id === 'ahm' ? 2 : 3;
+                        const seriesResult = await fetchSeries(stationId, 1440);
+                        return { stationId, data: seriesResult.data || [] };
+                    } catch (e) {
+                        console.warn(`Failed to fetch series for ${station.name}:`, e);
+                        return { stationId: station.id, data: [] };
                     }
-                } catch (apiError) {
-                    console.warn('API fetch failed, falling back to file-based:', apiError);
-                }
-
-                // Fallback to file-based data
-                const [ahm, udi, mtabu] = await Promise.all([
-                    fetchStation(new URL('../data/ahm.txt', import.meta.url)),
-                    fetchStation(new URL('../data/udi.txt', import.meta.url)),
-                    fetchStation(new URL('../data/mtabu.txt', import.meta.url)),
-                ]);
-                if (!mounted) return;
-                setStations([
-                    { id: 'ahm', name: 'Ahmedabad', metrics: ahm },
-                    { id: 'udi', name: 'Udaipur', metrics: udi },
-                    { id: 'mtabu', name: 'Mt Abu', metrics: mtabu },
-                ]);
-                setLastUpdated(new Date());
+                });
+                const seriesResults = await Promise.all(seriesPromises);
+                const seriesMap = {};
+                seriesResults.forEach(({ stationId, data }) => { seriesMap[stationId] = data; });
+                setSeriesData(seriesMap);
             } catch (e) {
                 if (!mounted) return;
-                setError(e.message || 'Failed to load stations');
-            } finally {
-                if (!mounted) return;
-                setLoading(false);
+                console.warn('Failed to load climate/series data:', e);
             }
         })();
-        return () => {
-            mounted = false;
-        };
-    }, []);
+        return () => { mounted = false; };
+    }, [list, stations]);
 
     return (
         <div style={{
@@ -120,7 +133,7 @@ export default function HomePage() {
             display: 'flex',
             flexDirection: 'column'
         }}>
-            <Navbar lastUpdated={lastUpdated} />
+            <Navbar lastUpdated={lastUpdated ? new Date(lastUpdated) : null} />
 
             <main className="home-main">
                 {/* Left sidebar with station widgets */}
@@ -134,6 +147,67 @@ export default function HomePage() {
                     }}>
                         Weather Stations
                     </h2>
+
+                    <div style={{
+                        marginBottom: '20px',
+                        padding: '8px 12px',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        textAlign: 'center'
+                    }}>
+                        {lastUpdated ? (
+                            <>Last updated: {new Date(lastUpdated).toLocaleTimeString()}</>
+                        ) : (
+                            <>Loading live data...</>
+                        )}
+                        {loading && <div style={{ marginTop: '4px', fontSize: '10px' }}>🔄 Updating...</div>}
+
+                        {/* Debug info */}
+                        <div style={{ marginTop: '8px', fontSize: '10px', color: 'rgba(255, 255, 255, 0.6)' }}>
+                            Stations: {Object.keys(bySlug).length} | Data: {list.length}
+                        </div>
+
+                        {/* Temperature debug */}
+                        <div style={{ marginTop: '4px', fontSize: '10px', color: 'rgba(255, 255, 255, 0.8)' }}>
+                            Temps: Ahm={ahm?.temperature_c || 'N/A'}°C | Udi={udi?.temperature_c || 'N/A'}°C | Abu={mtabu?.temperature_c || 'N/A'}°C
+                        </div>
+
+                        {/* Raw data debug */}
+                        <div style={{ marginTop: '4px', fontSize: '9px', color: 'rgba(255, 255, 255, 0.6)', maxWidth: '300px', wordBreak: 'break-all' }}>
+                            Raw: {JSON.stringify(list.slice(0, 1))}
+                        </div>
+
+                        <button
+                            onClick={async () => {
+                                setManualRefresh(true);
+                                try {
+                                    const result = await getLatest();
+                                    console.log('[HomePage] Manual refresh result:', result);
+                                    alert(`Manual refresh successful! Got ${result.data?.length || 0} stations. Check console for details.`);
+                                } catch (err) {
+                                    console.error('[HomePage] Manual refresh failed:', err);
+                                    alert(`Manual refresh failed: ${err.message}`);
+                                } finally {
+                                    setManualRefresh(false);
+                                }
+                            }}
+                            disabled={manualRefresh}
+                            style={{
+                                marginTop: '8px',
+                                padding: '4px 8px',
+                                fontSize: '10px',
+                                background: 'rgba(255, 255, 255, 0.2)',
+                                border: '1px solid rgba(255, 255, 255, 0.3)',
+                                borderRadius: '4px',
+                                color: 'white',
+                                cursor: manualRefresh ? 'not-allowed' : 'pointer'
+                            }}
+                        >
+                            {manualRefresh ? 'Refreshing...' : '🔄 Refresh'}
+                        </button>
+                    </div>
 
                 {error ? (
                         <div style={{
@@ -157,18 +231,17 @@ export default function HomePage() {
                         ))}
                     </div>
                 ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                             {stations.map((station) => (
                                 <div key={station.id} style={{
                                     background: 'rgba(255, 255, 255, 0.95)',
                                     borderRadius: '16px',
-                                    padding: '20px',
+                                    padding: '24px',
                                     boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
                                     border: '1px solid rgba(255, 255, 255, 0.2)',
                                     backdropFilter: 'blur(10px)',
                                     transform: 'translateY(0)',
-                                    transition: 'all 0.3s ease',
-                                    cursor: 'pointer'
+                                    transition: 'all 0.3s ease'
                                 }}
                                 onMouseEnter={(e) => {
                                     e.currentTarget.style.transform = 'translateY(-4px)';
@@ -177,66 +250,89 @@ export default function HomePage() {
                                 onMouseLeave={(e) => {
                                     e.currentTarget.style.transform = 'translateY(0)';
                                     e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.1)';
-                                }}
-                                onClick={() => window.location.href = `/station/${station.id}`}>
-                                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-                                        <div style={{
-                                            width: '40px',
-                                            height: '40px',
-                                            borderRadius: '50%',
-                                            background: 'linear-gradient(135deg, #667eea, #764ba2)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            marginRight: '12px',
-                                            color: 'white',
-                                            fontWeight: 'bold',
-                                            fontSize: '16px'
-                                        }}>
-                                            {station.name.charAt(0)}
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                                            <div style={{
+                                                width: '40px',
+                                                height: '40px',
+                                                borderRadius: '50%',
+                                                background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                marginRight: '12px',
+                                                color: 'white',
+                                                fontWeight: 'bold',
+                                                fontSize: '16px'
+                                            }}>
+                                                {station.name.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <h3 style={{ margin: '0 0 4px 0', fontSize: '20px', fontWeight: '600', color: '#1f2937' }}>
+                                                    {station.name}
+                                                </h3>
+                                                <p style={{ margin: '0', fontSize: '14px', color: '#6b7280' }}>
+                                                    Live Weather Data
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', fontWeight: '600', color: '#1f2937' }}>
-                                                {station.name}
-                                            </h3>
-                                            <p style={{ margin: '0', fontSize: '14px', color: '#6b7280' }}>
-                                                Live Weather Data
-                                            </p>
-                                        </div>
+                                        <Link
+                                            to={`/station/${station.id}`}
+                                            style={{
+                                                color: '#3b82f6',
+                                                textDecoration: 'none',
+                                                fontSize: '14px',
+                                                fontWeight: '500',
+                                                padding: '8px 16px',
+                                                borderRadius: '6px',
+                                                border: '1px solid #3b82f6',
+                                                transition: 'all 0.2s ease'
+                                            }}
+                                            onMouseEnter={(e) => {
+                                                e.target.style.background = '#3b82f6';
+                                                e.target.style.color = 'white';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.target.style.background = 'transparent';
+                                                e.target.style.color = '#3b82f6';
+                                            }}>
+                                            View Details →
+                                        </Link>
                                     </div>
 
                                     {station.metrics && (
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                <span style={{ fontSize: '12px', color: '#6b7280' }}>Temp:</span>
-                                                <span style={{ fontWeight: '600', color: '#1f2937' }}>
-                                                    {station.metrics.temperature_c ?? '—'}°C
-                                                </span>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                <span style={{ fontSize: '12px', color: '#6b7280' }}>Humidity:</span>
-                                                <span style={{ fontWeight: '600', color: '#1f2937' }}>
-                                                    {station.metrics.humidity_pct ?? '—'}%
-                                                </span>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                <span style={{ fontSize: '12px', color: '#6b7280' }}>Rainfall:</span>
-                                                <span style={{ fontWeight: '600', color: '#1f2937' }}>
-                                                    {station.metrics.rainfall_mm ?? '—'} mm
-                                                </span>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                <span style={{ fontSize: '12px', color: '#6b7280' }}>Pressure:</span>
-                                                <span style={{ fontWeight: '600', color: '#1f2937' }}>
-                                                    {station.metrics.pressure_hpa ?? '—'} hPa
-                                                </span>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                <span style={{ fontSize: '12px', color: '#6b7280' }}>Wind:</span>
-                                                <span style={{ fontWeight: '600', color: '#1f2937' }}>
-                                                    {station.metrics.windspeed_ms ?? '—'} m/s
-                                                </span>
-                                            </div>
+                                        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                                            <StatCard
+                                                icon={FiThermometer}
+                                                label="Temperature"
+                                                value={station.metrics.temperature_c ?? '—'}
+                                                unit="°C"
+                                            />
+                                            <StatCard
+                                                icon={FiDroplet}
+                                                label="Humidity"
+                                                value={station.metrics.humidity_pct ?? '—'}
+                                                unit="%"
+                                            />
+                                            <StatCard
+                                                icon={FiCloudRain}
+                                                label="Rainfall"
+                                                value={station.metrics.rainfall_mm ?? '—'}
+                                                unit="mm"
+                                            />
+                                            <StatCard
+                                                icon={FiTrendingDown}
+                                                label="Pressure"
+                                                value={station.metrics.pressure_hpa ?? '—'}
+                                                unit="hPa"
+                                            />
+                                            <StatCard
+                                                icon={FiWind}
+                                                label="Wind Speed"
+                                                value={station.metrics.windspeed_ms ?? '—'}
+                                                unit="m/s"
+                                            />
                                         </div>
                                     )}
 

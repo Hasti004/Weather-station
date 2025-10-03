@@ -4,7 +4,8 @@ import Navbar from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import StatCard from '../components/StatCard';
 import ErrorBanner from '../components/ErrorBanner';
-import { fetchLatest, fetchRange, handleApiError } from '../services/api';
+import { fetchRange, handleApiError } from '../services/api';
+import { useLiveStation } from '../live/LiveDataProvider';
 import { useObservatories } from '../hooks/useObservatories';
 import TimeFilterToolbar from '../components/TimeFilterToolbar';
 import ChartPanel from '../components/ChartPanel';
@@ -19,7 +20,7 @@ import { FIELD_META, DEFAULT_X } from '../utils/fields';
 import { buildSeries } from '../utils/aggregate';
 import AvailabilityButton from '../components/availability/AvailabilityButton';
 import AvailabilityModal from '../components/availability/AvailabilityModal';
-import { FiThermometer, FiDroplet, FiCloudRain, FiTrendingDown, FiWind, FiEye } from 'react-icons/fi';
+import { FiThermometer, FiDroplet, FiCloudRain, FiTrendingDown, FiWind } from 'react-icons/fi';
 
 // Station names will be fetched from observatories API
 
@@ -41,7 +42,7 @@ export default function StationPage() {
     const [lastUpdated, setLastUpdated] = useState(null);
     const [filter, setFilter] = useState({ mode: 'monthly', start: null, end: null, granularity: 'daily' });
     const [showAvail, setShowAvail] = useState(false);
-    const { getStationName, getStationLocation } = useObservatories();
+    const { getStationName } = useObservatories();
 
     const resolvedRange = useMemo(() => {
         const now = new Date();
@@ -56,7 +57,7 @@ export default function StationPage() {
         }
         if (filter.mode === 'monthly') {
             const start = new Date(now);
-            start.setMonth(start.getMonth() - 1);
+            start.setDate(start.getDate() - 7); // Use last 7 days instead of full month
             return { start, end: now };
         }
         if (filter.start && filter.end) return { start: filter.start, end: filter.end };
@@ -64,20 +65,26 @@ export default function StationPage() {
         return { start, end: now };
     }, [filter]);
 
-    // Load live data
-    const loadLiveData = async () => {
-        try {
-            setLiveError(null);
-            const result = await fetchLatest();
-            const stationData = result.data?.find(d => d.station_id === STATION_ID_MAP[id]);
-            setLiveData(stationData);
-            setLastUpdated(new Date());
-        } catch (err) {
-            setLiveError(handleApiError(err));
-        } finally {
+    // Live data from shared context
+    const alias = id === 'udi' ? 'udi' : id === 'ahm' ? 'ahm' : 'mtabu';
+    const { data: liveOne, loading: liveHookLoading, error: liveHookError, lastUpdated: lastUpdatedIso } = useLiveStation(alias);
+
+    useEffect(() => {
+        if (liveOne) {
+            setLiveData(liveOne);
+            setLastUpdated(new Date(lastUpdatedIso || Date.now()));
             setLiveLoading(false);
+            setLiveError(null); // Clear any previous errors
         }
-    };
+        if (liveHookError) {
+            console.warn('[StationPage] Live hook error:', liveHookError);
+            // Only set error if we don't have existing live data
+            if (!liveOne) {
+                setLiveError(liveHookError);
+                setLiveLoading(false);
+            }
+        }
+    }, [liveOne, liveHookError, liveHookLoading, lastUpdatedIso]);
 
     // Load archive data
     const loadArchiveData = async () => {
@@ -85,23 +92,33 @@ export default function StationPage() {
             setArchiveError(null);
             setArchiveLoading(true);
             const stationId = STATION_ID_MAP[id];
-            const start = resolvedRange.start.toISOString();
-            const end = resolvedRange.end.toISOString();
+
+            // Format dates properly for the API
+            const formatDate = (date) => {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const seconds = String(date.getSeconds()).padStart(2, '0');
+                return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+            };
+
+            const start = formatDate(resolvedRange.start);
+            const end = formatDate(resolvedRange.end);
+
+            console.log(`[StationPage] Fetching range data: ${start} to ${end}`);
             const result = await fetchRange(stationId, start, end);
             setArchiveData(result.data || []);
         } catch (err) {
+            console.error('[StationPage] Range fetch error:', err);
             setArchiveError(handleApiError(err));
         } finally {
             setArchiveLoading(false);
         }
     };
 
-    // Load live data on mount and set up refresh interval
-    useEffect(() => {
-        loadLiveData();
-        const interval = setInterval(loadLiveData, Number(process.env.REACT_APP_LIVE_INTERVAL_MS || 30000));
-        return () => clearInterval(interval);
-    }, [id]);
+    // Remove old manual polling; handled by hook
 
     // Load archive data when range changes
     useEffect(() => {

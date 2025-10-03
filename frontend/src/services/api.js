@@ -3,16 +3,93 @@
  * Replaces file-based data fetching with HTTP endpoints
  */
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || process.env.REACT_APP_API_BASE || "http://localhost:8000";
+const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8000";
+console.log('[API] API_BASE set to:', API_BASE);
 
 /**
- * Fetch latest readings from all weather stations
+ * Fetch latest readings from all weather stations with no-cache headers
  * @returns {Promise<Object>} Response with data array containing latest readings
  */
 export async function fetchLatest() {
-  const res = await fetch(`${API_BASE}/latest`);
+  console.log('[API] Fetching from:', `${API_BASE}/latest`);
+  const res = await fetch(`${API_BASE}/latest`, {
+    headers: {
+      'Accept': 'application/json',
+      'Cache-Control': 'no-cache'
+    },
+    cache: 'no-store'
+  });
+  console.log('[API] Response status:', res.status);
   if (!res.ok) {
     throw new Error(`HTTP error! status: ${res.status}`);
+  }
+  const data = await res.json();
+  console.log('[API] Response data:', data);
+  return data;
+}
+
+// Station mapping constants
+export const STATIONS = {
+  ahm: 'Ahmedabad',
+  udi: 'Udaipur',
+  mtabu: 'Mount Abu'
+};
+
+// Map numeric station_id to alias and name used in UI
+function mapStationMeta(id) {
+  const n = Number(id);
+  if (n === 1) return { alias: 'udi', name: 'Udaipur' };
+  if (n === 2) return { alias: 'ahm', name: 'Ahmedabad' };
+  if (n === 3) return { alias: 'mtabu', name: 'Mount Abu' };
+  return { alias: String(id), name: `Station ${id}` };
+}
+
+/**
+ * Fetch and normalize latest readings for home dashboard
+ * @returns {Promise<{data:Array, lastUpdated:string}>}
+ */
+export async function getLatest() {
+  const raw = await fetchLatest();
+  const rows = Array.isArray(raw?.data) ? raw.data : [];
+  const normalized = rows.map(r => {
+    // Use slug if available, otherwise map from station_id
+    const slug = r.slug || mapStationMeta(r.station_id).alias;
+    const name = r.station_name || mapStationMeta(r.station_id).name;
+
+    return {
+      slug,
+      station_id: r.station_id,
+      name,
+      location: r.location,
+      temperature_c: r.temperature_c ?? null,
+      humidity_pct: r.humidity_pct ?? null,
+      pressure_hpa: r.pressure_hpa ?? null,
+      rainfall_mm: r.rainfall_mm ?? null,
+      windspeed_ms: r.windspeed_ms ?? null,
+      reading_ts: r.reading_ts || r.timestamp || null,
+    };
+  });
+
+  return {
+    data: normalized,
+    lastUpdated: raw.last_updated || null
+  };
+}
+
+/**
+ * Fetch latest row for a single station
+ * @param {string|number} stationIdOrAlias - 1/2/3 or udi/ahm/mtabu/udaipur/ahmedabad/mountabu
+ */
+export async function fetchLatestOne(stationIdOrAlias) {
+  const params = new URLSearchParams({ station_id: String(stationIdOrAlias) });
+  const res = await fetch(`${API_BASE}/latest_one?${params}`);
+  if (!res.ok) {
+    let msg = `HTTP error! status: ${res.status}`;
+    try {
+      const j = await res.json();
+      if (j.detail) msg = j.detail;
+    } catch {}
+    throw new Error(msg);
   }
   return res.json();
 }

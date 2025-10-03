@@ -15,6 +15,10 @@ Environment Configuration:
 import json
 import asyncio
 import logging
+import zipfile
+import tempfile
+import os
+from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, Query, HTTPException
@@ -22,7 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from dotenv import load_dotenv
 
-from db import query
+from db import query, get_conn
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -74,11 +78,236 @@ def resolve_station_id(value: Any) -> int:
         return STATION_ALIAS[s]
     raise ValueError("Unknown station_id. Use 1/2/3 or udaipur/ahmedabad/mountabu")
 
+# -------------------- Live TXT ingestion background task --------------------
+import asyncio
+import os
+
+STATION_ALIAS_SHORT = {"udi": 1, "ahm": 2, "mtabu": 3}
+
+INGEST_HEALTH = {
+    "interval": 30,
+    "last_run": None,
+    "stations": {
+        "udi": {"file": None, "last_file_mtime": None, "last_insert_timestamp": None},
+        "ahm": {"file": None, "last_file_mtime": None, "last_insert_timestamp": None},
+        "mtabu": {"file": None, "last_file_mtime": None, "last_insert_timestamp": None},
+    },
+}
+
+MISSING_VALUES = {"", "NA", "NAN", "-999", "null", "None"}
+
+def _to_num(x: str):
+    if x is None: return None
+    s = str(x).strip()
+    if s.upper() in MISSING_VALUES: return None
+    try:
+        v = float(s)
+        return round(v, 1)
+    except Exception:
+        return None
+
+def read_last_line(path: Path) -> str:
+    try:
+        with path.open('r', encoding='utf-8') as f:
+            data = f.read().strip()
+        if not data:
+            return ""
+        # last non-empty line
+        lines = [ln for ln in data.splitlines() if ln.strip()]
+        return lines[-1] if lines else ""
+    except Exception:
+        return ""
+
+def parse_live_line(alias: str, line: str) -> dict:
+    # Expected simple CSV: temp,humidity,wind,pressure,rainfall,(extra)
+    parts = [p.strip() for p in line.split(',')]
+    if len(parts) < 5:
+        return {}
+    return {
+        'temp_out_c': _to_num(parts[0]),
+        'hum_out': _to_num(parts[1]),
+        'wind_speed_ms': _to_num(parts[2]),
+        'barometer_hpa': _to_num(parts[3]),
+        'rain_day_mm': _to_num(parts[4])
+    }
+
+async def live_ingest_loop():
+    interval = int(os.getenv('LIVE_POLL_SECONDS', '30'))
+    base = Path(__file__).resolve().parent / 'data'
+    files = {
+        'udi': Path(os.getenv('LIVE_FILE_UDI', str(base / 'udi.txt'))),
+        'ahm': Path(os.getenv('LIVE_FILE_AHM', str(base / 'ahm.txt'))),
+        'mtabu': Path(os.getenv('LIVE_FILE_MTABU', str(base / 'mtabu.txt'))),
+    }
+    INGEST_HEALTH['interval'] = interval
+    for k, p in files.items():
+        INGEST_HEALTH['stations'][k]['file'] = str(p)
+
+    logger.info(f"live_ingest_loop started interval={interval}s files={ {k:str(v) for k,v in files.items()} }")
+    while True:
+        try:
+            now = datetime.now()
+            for alias, path in files.items():
+                try:
+                    if not path.exists():
+                        continue
+                    mtime = datetime.fromtimestamp(path.stat().st_mtime).isoformat()
+                    INGEST_HEALTH['stations'][alias]['last_file_mtime'] = mtime
+                    line = read_last_line(path)
+                    if not line:
+                        continue
+                    payload = parse_live_line(alias, line)
+                    if not payload:
+                        continue
+                    sid = STATION_ALIAS_SHORT[alias]
+                    ts_str = now.strftime('%Y-%m-%d %H:%M:%S')
+
+                    # Upsert
+                    cols = ['station_id', 'timestamp', 'temp_out_c', 'hum_out', 'rain_day_mm', 'barometer_hpa', 'wind_speed_ms']
+                    values = [sid, ts_str, payload.get('temp_out_c'), payload.get('hum_out'), payload.get('rain_day_mm'), payload.get('barometer_hpa'), payload.get('wind_speed_ms')]
+                    placeholders = ','.join(['%s'] * len(values))
+                    insert_sql = f"""
+                    INSERT INTO readings ({', '.join(cols)})
+                    VALUES ({placeholders})
+                    ON DUPLICATE KEY UPDATE
+                      temp_out_c=VALUES(temp_out_c),
+                      hum_out=VALUES(hum_out),
+                      rain_day_mm=VALUES(rain_day_mm),
+                      barometer_hpa=VALUES(barometer_hpa),
+                      wind_speed_ms=VALUES(wind_speed_ms)
+                    """
+                    conn = get_conn(); cur = conn.cursor()
+                    cur.execute(insert_sql, values)
+                    conn.commit(); cur.close(); conn.close()
+                    INGEST_HEALTH['stations'][alias]['last_insert_timestamp'] = ts_str
+                    logger.info(f"live_ingest upsert alias={alias} ts={ts_str} vals={payload}")
+                except Exception as e:
+                    logger.warning(f"live_ingest station={alias} error={e}")
+                    # continue with other stations
+                    continue
+            INGEST_HEALTH['last_run'] = now.isoformat()
+        except Exception as e:
+            logger.exception(f"live_ingest loop error: {e}")
+        await asyncio.sleep(interval)
+
+@app.on_event("startup")
+async def _start_live_task():
+    try:
+        app.state._live_task = asyncio.create_task(live_ingest_loop())
+    except Exception as e:
+        logger.warning(f"failed to start live_ingest_loop: {e}")
+
+@app.on_event("shutdown")
+async def _stop_live_task():
+    task = getattr(app.state, '_live_task', None)
+    if task:
+        task.cancel()
+        try:
+            await task
+        except Exception:
+            pass
+
+@app.get("/live_health")
+async def live_health():
+    return INGEST_HEALTH
+
+@app.get("/latest_one")
+async def latest_one(station_id: str = Query(..., description="Station ID (1,2,3) or alias (udi|ahm|mtabu|udaipur|ahmedabad|mountabu)")):
+    """Return the latest reading for a single station, translated for the frontend."""
+    try:
+        # Accept short aliases as well
+        short_alias = {"udi": 1, "ahm": 2, "mtabu": 3}
+        try:
+            sid = resolve_station_id(station_id)
+        except ValueError:
+            sid = short_alias.get(str(station_id).strip().lower())
+            if not sid:
+                return JSONResponse(status_code=400, content={"detail": "Unknown station_id. Use 1/2/3 or udi/ahm/mtabu"})
+
+        sql = f"""
+        SELECT r.*
+        FROM readings r
+        WHERE r.station_id = %s
+        ORDER BY r.{TIME_COL} DESC
+        LIMIT 1
+        """
+        rows = query(sql, (sid,))
+        if not rows:
+            return JSONResponse(status_code=404, content={"detail": "No data for station"})
+
+        translated = translate_reading_to_frontend(rows[0])
+        return {
+            "station_id": sid,
+            "data": translated,
+            "ts": datetime.now().isoformat()
+        }
+    except Exception:
+        logger.exception("/latest_one failed")
+        return JSONResponse(status_code=500, content={"detail": "Failed to fetch latest row"})
+
+@app.get("/latest_file")
+async def latest_from_file(station_id: str = Query(..., description="Station alias or id: udi|ahm|mtabu or 1|2|3")):
+    """Read live TXT file for a station and return a synthetic latest row for quick demos.
+
+    Format expected: "temp,humidity,windspeed,pressure,rainfall,extra" on one line.
+    """
+    try:
+        # Resolve alias to filename
+        alias = str(station_id).strip().lower()
+        if alias.isdigit():
+            alias = {"1": "udi", "2": "ahm", "3": "mtabu"}.get(alias, alias)
+
+        base = Path(__file__).resolve().parent / 'data'
+        file_map = {
+            'udi': base / 'udi.txt',
+            'ahm': base / 'ahm.txt',
+            'mtabu': base / 'mtabu.txt',
+            'ahmedabad': base / 'ahm.txt',
+            'udaipur': base / 'udi.txt',
+            'mountabu': base / 'mtabu.txt',
+        }
+        fp = file_map.get(alias)
+        if not fp:
+            return JSONResponse(status_code=400, content={"detail": "Unknown station alias. Use udi/ahm/mtabu"})
+        if not fp.exists():
+            return JSONResponse(status_code=404, content={"detail": f"File not found: {fp}"})
+
+        with fp.open('r', encoding='utf-8') as f:
+            line = f.read().strip()
+        parts = [p.strip() for p in line.split(',')]
+        if len(parts) < 5:
+            return JSONResponse(status_code=400, content={"detail": f"Malformed line in {fp}: {line}"})
+
+        # Map to frontend fields (numbers where possible)
+        def to_num(x):
+            try:
+                return float(x)
+            except Exception:
+                return None
+
+        data = {
+            'station_id': {'udi': 1, 'ahm': 2, 'mtabu': 3}.get(alias, None),
+            'reading_ts': datetime.now().isoformat(),
+            'temperature_c': to_num(parts[0]),
+            'humidity_pct': to_num(parts[1]),
+            'windspeed_ms': to_num(parts[2]),
+            'pressure_hpa': to_num(parts[3]),
+            'rainfall_mm': to_num(parts[4]),
+        }
+
+        return { 'station_id': data['station_id'], 'data': data, 'ts': data['reading_ts'] }
+    except Exception:
+        logger.exception("/latest_file failed")
+        return JSONResponse(status_code=500, content={"detail": "Failed to read live file"})
+
 def serialize_datetime(obj):
     """Serialize datetime objects to ISO format strings."""
     if isinstance(obj, datetime):
         return obj.isoformat()
-    return obj
+    elif hasattr(obj, 'isoformat'):  # Handle other datetime-like objects
+        return obj.isoformat()
+    else:
+        return obj
 
 def translate_reading_to_frontend(row: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -161,7 +390,7 @@ async def health():
 
 @app.get("/latest")
 async def get_latest():
-    """Get latest readings for all stations."""
+    """Get latest readings for all stations with no-cache headers."""
     try:
         sql = """
         SELECT r.*, s.name as station_name, s.location
@@ -169,7 +398,7 @@ async def get_latest():
         JOIN stations s ON r.station_id = s.station_id
         JOIN (
             SELECT station_id, MAX(timestamp) AS max_ts
-        FROM readings
+            FROM readings
             GROUP BY station_id
         ) t ON t.station_id = r.station_id AND t.max_ts = r.timestamp
         ORDER BY r.station_id
@@ -177,11 +406,54 @@ async def get_latest():
 
         results = query(sql)
 
-        # Translate to frontend format
-        translated_results = [translate_reading_to_frontend(row) for row in results]
+        # Translate to frontend format and add slug mapping
+        translated_results = []
+        max_ts = None
 
-        return {"data": translated_results, "count": len(translated_results)}
+        for row in results:
+            translated = translate_reading_to_frontend(row)
+
+            # Add slug mapping (1->udi, 2->ahm, 3->mtabu)
+            station_id = translated.get('station_id')
+            if station_id == 1:
+                translated['slug'] = 'udi'
+            elif station_id == 2:
+                translated['slug'] = 'ahm'
+            elif station_id == 3:
+                translated['slug'] = 'mtabu'
+            else:
+                translated['slug'] = f'station_{station_id}'
+
+            # Track max timestamp
+            reading_ts = translated.get('reading_ts')
+            if reading_ts and (max_ts is None or reading_ts > max_ts):
+                max_ts = reading_ts
+
+            translated_results.append(translated)
+
+        # Add INFO logging
+        logger.info(f"/latest endpoint hit: {len(translated_results)} stations, max_ts={max_ts}")
+
+        response_data = {
+            "data": translated_results,
+            "count": len(translated_results),
+            "last_updated": max_ts
+        }
+
+        # Create response with no-cache headers
+        from fastapi import Response
+        response = Response(
+            content=json.dumps(response_data, default=serialize_datetime),
+            media_type="application/json"
+        )
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+
+        return response
+
     except Exception as e:
+        logger.exception("/latest endpoint failed")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.get("/range")
@@ -189,6 +461,7 @@ def range_obs(
     station_id: str = Query(..., description="Station ID (1, 2, 3) or 'all'"),
     start: str = Query(..., description="YYYY-MM-DDTHH:MM:SS"),
     end: str = Query(..., description="YYYY-MM-DDTHH:MM:SS"),
+    limit: int = Query(10000, description="Maximum number of records to return"),
 ):
     """Get readings within a time range."""
     start_ts = start.replace("T", " ")
@@ -202,8 +475,9 @@ def range_obs(
             JOIN stations s ON r.station_id = s.station_id
             WHERE r.timestamp >= %s AND r.timestamp < %s
             ORDER BY r.station_id, r.timestamp
+            LIMIT %s
             """
-            results = query(sql, (start_ts, end_ts))
+            results = query(sql, (start_ts, end_ts, limit))
         else:
             sql = """
             SELECT r.*, s.name as station_name, s.location
@@ -211,14 +485,52 @@ def range_obs(
             JOIN stations s ON r.station_id = s.station_id
             WHERE r.station_id = %s AND r.timestamp >= %s AND r.timestamp < %s
             ORDER BY r.timestamp
+            LIMIT %s
             """
-            results = query(sql, (station_id, start_ts, end_ts))
+            results = query(sql, (station_id, start_ts, end_ts, limit))
 
         # Translate to frontend format
-        translated_results = [translate_reading_to_frontend(row) for row in results]
+        translated_results = []
+        for i, row in enumerate(results):
+            try:
+                translated = translate_reading_to_frontend(row)
+                translated_results.append(translated)
+            except Exception as e:
+                logger.error(f"Error translating row {i}: {e}")
+                # Skip problematic rows
+                continue
 
-        return {"data": translated_results, "count": len(translated_results)}
+        # Add INFO logging
+        logger.info(f"/range endpoint hit: station_id={station_id}, start={start_ts}, end={end_ts}, rows={len(translated_results)}")
+
+        response_data = {"data": translated_results, "count": len(translated_results)}
+
+        # Create response with no-cache headers
+        from fastapi import Response
+        try:
+            # Use a more robust JSON serialization
+            import json
+            response = Response(
+                content=json.dumps(response_data, default=str),
+                media_type="application/json"
+            )
+        except (TypeError, ValueError) as e:
+            logger.error(f"JSON serialization error in /range: {e}")
+            # Fallback: return minimal data
+            fallback_data = {"data": [], "count": 0, "error": "Data serialization error"}
+            response = Response(
+                content=json.dumps(fallback_data),
+                media_type="application/json"
+            )
+
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+
+        return response
+
     except Exception as e:
+        logger.exception("/range endpoint failed")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.get("/series")
@@ -245,14 +557,31 @@ async def get_series(
         # Translate to frontend format
         translated_results = [translate_reading_to_frontend(row) for row in results]
 
-        return {
+        # Add INFO logging
+        logger.info(f"/series endpoint hit: station_id={station_id}, minutes={minutes}, rows={len(translated_results)}")
+
+        response_data = {
             "station_id": station_id,
             "start_time": start_time.isoformat(),
             "minutes": minutes,
             "data": translated_results,
             "count": len(translated_results)
         }
+
+        # Create response with no-cache headers
+        from fastapi import Response
+        response = Response(
+            content=json.dumps(response_data, default=serialize_datetime),
+            media_type="application/json"
+        )
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+
+        return response
+
     except Exception as e:
+        logger.exception("/series endpoint failed")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.get("/download/csv")
@@ -395,6 +724,167 @@ async def download_csv(
     except Exception as e:
         logger.exception("/download/csv failed")
         return JSONResponse(status_code=500, content={"detail": "Failed to build CSV. Please try again."})
+
+@app.get("/download/xlsx-zip")
+async def download_xlsx_zip(
+    station_id: str = Query(..., description="Station ID (1,2,3) or alias: udaipur/ahmedabad/mountabu"),
+    start: str = Query(..., description="Start date (YYYY-MM-DD)"),
+    end: str = Query(..., description="End date (YYYY-MM-DD)"),
+    row_limit_per_xlsx: int = Query(1048576, description="Max rows per XLSX file (Excel limit)"),
+    batch_size: int = Query(50000, description="DB fetch batch size")
+):
+    logger.info(f"/download/xlsx-zip params station_id={station_id}, start={start}, end={end}, row_limit={row_limit_per_xlsx}, batch={batch_size}")
+    try:
+        try:
+            station_norm = resolve_station_id(station_id)
+        except ValueError as ve:
+            return JSONResponse(status_code=400, content={"detail": str(ve)})
+
+        try:
+            start_dt = datetime.strptime(start, '%Y-%m-%d')
+            end_dt = datetime.strptime(end, '%Y-%m-%d')
+        except ValueError:
+            return JSONResponse(status_code=400, content={"detail": "Invalid date format (expected YYYY-MM-DD)"})
+
+        if start_dt > end_dt:
+            return JSONResponse(status_code=400, content={"detail": "start must be <= end"})
+
+        start_ts = f"{start} 00:00:00"
+        end_ts = f"{end} 23:59:59"
+
+        exists = query("SELECT COUNT(1) AS cnt FROM stations WHERE station_id=%s", (station_norm,)) or []
+        if not exists or not exists[0].get('cnt'):
+            return JSONResponse(status_code=400, content={"detail": f"Unknown station_id: {station_id}"})
+
+        time_column = TIME_COL
+
+        # Column order consistent with /range translation target
+        column_order = [
+            'station_id', time_column,
+            'temperature_c', 'humidity_pct', 'rainfall_mm', 'pressure_hpa', 'windspeed_ms', 'wind_dir', 'battery_pct', 'battery_voltage_v',
+            'temp_in_c', 'temp_out_c', 'hum_in', 'hum_out', 'rain_day_mm', 'rain_rate_mm_hr', 'solar_rad', 'sunrise', 'sunset', 'created_at'
+        ]
+
+        # Determine available columns from a probe
+        probe = query(
+            f"SELECT * FROM readings WHERE station_id=%s AND {time_column} BETWEEN %s AND %s ORDER BY {time_column} ASC LIMIT 1",
+            (station_norm, start_ts, end_ts)
+        ) or []
+        available = set(probe[0].keys()) if probe else set()
+        select_cols = [c for c in column_order if c in available] if available else [
+            'station_id', time_column, 'temp_out_c', 'hum_out', 'rain_day_mm', 'barometer_hpa', 'wind_speed_ms', 'wind_dir', 'battery_status', 'battery_volts'
+        ]
+
+        logger.info(f"/download/xlsx-zip resolved station_id={station_norm}, start_ts={start_ts}, end_ts={end_ts}, time_col={time_column}")
+        logger.info(f"/download/xlsx-zip columns: {select_cols}")
+
+        from decimal import Decimal
+        import json as pyjson
+        from openpyxl import Workbook
+
+        def norm(v):
+            if v is None:
+                return ''
+            if isinstance(v, datetime):
+                return v.strftime('%Y-%m-%d %H:%M:%S')
+            if isinstance(v, Decimal):
+                return str(v)
+            if isinstance(v, bytes):
+                try:
+                    return v.decode('utf-8', errors='ignore')
+                except Exception:
+                    return ''
+            if isinstance(v, (dict, list)):
+                try:
+                    return pyjson.dumps(v, ensure_ascii=False)
+                except Exception:
+                    return str(v)
+            return v
+
+        tempdir = tempfile.TemporaryDirectory()
+        part_files = []
+        total_rows = 0
+        part_idx = 1
+        rows_in_current = 0
+        wb = None
+        ws = None
+        current_path = None
+
+        def new_part():
+            nonlocal wb, ws, current_path, rows_in_current, part_idx
+            if wb is not None:
+                wb.save(current_path)
+                wb.close()
+                logger.info(f"/download/xlsx-zip wrote part {current_path} rows={rows_in_current}")
+            filename = f"station_{station_id}_{start}_to_{end}_part{part_idx}.xlsx"
+            current_path = os.path.join(tempdir.name, filename)
+            wb = Workbook(write_only=True)
+            ws = wb.create_sheet("data")
+            # header
+            ws.append(select_cols)
+            rows_in_current = 0
+            part_files.append(current_path)
+            part_idx += 1
+
+        new_part()
+
+        offset = 0
+        while True:
+            rows = query(
+                f"SELECT {', '.join(select_cols)} FROM readings WHERE station_id=%s AND {time_column} BETWEEN %s AND %s ORDER BY {time_column} ASC LIMIT %s OFFSET %s",
+                (station_norm, start_ts, end_ts, batch_size, offset)
+            )
+            if not rows:
+                break
+            for r in rows:
+                ws.append([norm(r.get(c)) for c in select_cols])
+                rows_in_current += 1
+                total_rows += 1
+                if rows_in_current >= row_limit_per_xlsx:
+                    new_part()
+            offset += batch_size
+
+        # finalize last workbook
+        if wb is not None:
+            wb.save(current_path)
+            wb.close()
+            logger.info(f"/download/xlsx-zip wrote part {current_path} rows={rows_in_current}")
+
+        # Build ZIP into a NamedTemporaryFile
+        zip_tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+        zip_path = zip_tmp.name
+        zip_tmp.close()
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for p in part_files:
+                zf.write(p, arcname=os.path.basename(p))
+
+        logger.info(f"/download/xlsx-zip done total_rows={total_rows} parts={len(part_files)}")
+
+        def cleanup_and_stream():
+            try:
+                with open(zip_path, 'rb') as f:
+                    while True:
+                        chunk = f.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        yield chunk
+            finally:
+                try:
+                    os.remove(zip_path)
+                except Exception:
+                    pass
+                try:
+                    tempdir.cleanup()
+                except Exception:
+                    pass
+
+        zip_name = f"station_{station_id}_{start}_to_{end}.zip"
+        return StreamingResponse(cleanup_and_stream(), media_type='application/zip', headers={
+            'Content-Disposition': f"attachment; filename=\"{zip_name}\""
+        })
+    except Exception:
+        logger.exception("/download/xlsx-zip failed")
+        return JSONResponse(status_code=500, content={"detail": "Export failed"})
 
 @app.get("/stream")
 async def stream_data(station_id: Optional[str] = Query(None, description="Filter by station ID")):
@@ -633,6 +1123,20 @@ async def export_csv(
     except Exception as e:
         logger.error(f"Error exporting CSV for station {station_id}, {start} to {end}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/stations")
+async def get_stations():
+    """Get list of all stations."""
+    try:
+        sql = "SELECT station_id, name, location, created_at FROM stations ORDER BY station_id"
+        results = query(sql)
+
+        # Translate to frontend format
+        translated_results = [translate_station_to_frontend(row) for row in results]
+
+        return {"stations": translated_results, "count": len(translated_results)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.get("/observatories")
 async def get_observatories():

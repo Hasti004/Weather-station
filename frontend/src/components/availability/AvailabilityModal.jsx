@@ -18,6 +18,15 @@ export default function AvailabilityModal({ id, isOpen, onClose, onApplyRange })
     const [debouncedMonth, setDebouncedMonth] = useState(dayjs().month());
     const [debouncedYear, setDebouncedYear] = useState(dayjs().year());
 
+    // Date range selection state
+    const [fromYear, setFromYear] = useState(dayjs().year());
+    const [fromMonth, setFromMonth] = useState(dayjs().month());
+    const [toYear, setToYear] = useState(dayjs().year());
+    const [toMonth, setToMonth] = useState(dayjs().month());
+    const [fromDate, setFromDate] = useState(dayjs().startOf('month').format('YYYY-MM-DD'));
+    const [toDate, setToDate] = useState(dayjs().endOf('month').format('YYYY-MM-DD'));
+    const [allAvailableDates, setAllAvailableDates] = useState(new Set());
+
     // Debounce month/year changes
     React.useEffect(() => {
         const timer = setTimeout(() => {
@@ -224,6 +233,85 @@ export default function AvailabilityModal({ id, isOpen, onClose, onApplyRange })
         }
     }, [numericStationId, stationName, id, minDate, maxDate]);
 
+    // Export data for custom date range
+    const exportDateRange = useCallback(async () => {
+        setExportLoading(true);
+        try {
+            const startDate = fromDate;
+            const endDate = toDate;
+
+            // Validate date range
+            if (dayjs(startDate).isAfter(dayjs(endDate))) {
+                setToast({
+                    message: 'From date cannot be after To date',
+                    type: 'error'
+                });
+                setExportLoading(false);
+                return;
+            }
+
+            const alias = id === 'udi' ? 'udaipur' : id === 'ahm' ? 'ahmedabad' : 'mountabu';
+            const blob = await exportCsv2(alias, startDate, endDate);
+
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${stationName || STATION_NAMES[id]}_${startDate}_to_${endDate}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
+            setToast({
+                message: `Export complete: ${stationName || STATION_NAMES[id]}_${startDate}_to_${endDate}.csv`,
+                type: 'success'
+            });
+        } catch (err) {
+            setToast({
+                message: `Export failed: ${err.message}`,
+                type: 'error'
+            });
+        } finally {
+            setExportLoading(false);
+        }
+    }, [fromDate, toDate, numericStationId, stationName, id]);
+
+    // Load data for scrollable calendar (past 6 months)
+    React.useEffect(() => {
+        if (!numericStationId) return;
+
+        const loadScrollableData = async () => {
+            try {
+                const now = dayjs();
+                const sixMonthsAgo = now.subtract(6, 'month');
+
+                // Load data for the past 6 months
+                const response = await getDataForRange(
+                    sixMonthsAgo.format('YYYY-MM-DD'),
+                    now.format('YYYY-MM-DD')
+                );
+
+                if (response && response.length > 0) {
+                    const dates = new Set();
+                    response.forEach(reading => {
+                        if (reading.reading_ts) {
+                            const date = dayjs(reading.reading_ts).format('YYYY-MM-DD');
+                            dates.add(date);
+                        }
+                    });
+                    setAllAvailableDates(dates);
+                }
+            } catch (err) {
+                console.warn('Failed to load scrollable calendar data:', err);
+            }
+        };
+
+        loadScrollableData();
+    }, [numericStationId, getDataForRange]);
+
+    // No auto-download - user must click the download button manually
+
     // Handle ESC key to close modal
     React.useEffect(() => {
         const handleKeyDown = (event) => {
@@ -237,6 +325,7 @@ export default function AvailabilityModal({ id, isOpen, onClose, onApplyRange })
             return () => document.removeEventListener('keydown', handleKeyDown);
         }
     }, [isOpen, onClose]);
+
 
     // Clear toast after 3 seconds
     React.useEffect(() => {
@@ -260,118 +349,158 @@ export default function AvailabilityModal({ id, isOpen, onClose, onApplyRange })
                 }
             }}
         >
-            <div className="av-modal" style={{ width: 880, maxWidth: '90vw', background: '#fff', borderRadius: 16 }}>
+            <div className="av-modal" style={{ width: 1200, maxWidth: '95vw', height: '90vh', maxHeight: '90vh', background: '#fff', borderRadius: 16, display: 'flex', flexDirection: 'column' }}>
                 <div className="av-header">
                     <div style={{ fontWeight: 600 }}>{`Data Availability — ${stationName || STATION_NAMES[id] || ''}`}</div>
                     <button onClick={onClose} style={{ border: '1px solid var(--panel-border)', background: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>Close</button>
                 </div>
                 <div className="av-controls" style={{ padding: '10px 16px', borderBottom: '1px solid var(--panel-border)' }}>
-                    <label>
-                        Month
-                        <select value={month} onChange={(e) => setMonth(Number(e.target.value))} style={{ marginLeft: 6 }}>
-                            {months.map((m, i) => (
-                                <option key={m} value={i}>{m}</option>
-                            ))}
-                        </select>
-                    </label>
-                    <label>
-                        Year
-                        <select value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ marginLeft: 6 }}>
-                            {years.map((y) => (
-                                <option key={y} value={y}>{y}</option>
-                            ))}
-                        </select>
-                    </label>
-                    <label>
-                        Jump to
-                        <select onChange={(e) => { const found = jumpMonths.find(j => j.key === e.target.value); if (found) { setMonth(found.m); setYear(found.y); } }} style={{ marginLeft: 6 }}>
-                            <option value="">Select</option>
-                            {jumpMonths.map((j) => (
-                                <option key={j.key} value={j.key}>{j.label}</option>
-                            ))}
-                        </select>
-                    </label>
-                    <span style={{ flex: 1 }} />
+                    <div style={{ flex: 1 }} />
                     <div className="av-legend">
                         <span className="chip"><span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--avail-green)' }} /> Available</span>
                         <span className="chip"><span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--avail-red)' }} /> Missing</span>
                         <span className="chip"><span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--avail-gray)' }} /> Out</span>
+                        <span className="chip"><span style={{ width: 8, height: 8, borderRadius: 999, background: '#3b82f6', border: '1px solid #1d4ed8' }} /> Download Range</span>
                     </div>
                 </div>
-                {loading ? (
-                    <div style={{ padding: '40px', textAlign: 'center' }}>
+
+                {/* Date Range Selector */}
+                <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--panel-border)', background: '#f8fafc' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '14px', fontWeight: '600', color: '#374151' }}>
+                            📥 Download Data Range
+                        </span>
+                        <span style={{ fontSize: '12px', color: '#6b7280' }}>
+                            Select From/To dates and click Download Range
+                        </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '14px', fontWeight: '500' }}>From:</span>
+                            <input
+                                type="date"
+                                value={fromDate}
+                                onChange={(e) => setFromDate(e.target.value)}
+                                style={{
+                                    padding: '6px 8px',
+                                    border: '1px solid #d1d5db',
+                                    borderRadius: '4px',
+                                    fontSize: '14px'
+                                }}
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '14px', fontWeight: '500' }}>To:</span>
+                            <input
+                                type="date"
+                                value={toDate}
+                                onChange={(e) => setToDate(e.target.value)}
+                                style={{
+                                    padding: '6px 8px',
+                                    border: '1px solid #d1d5db',
+                                    borderRadius: '4px',
+                                    fontSize: '14px'
+                                }}
+                            />
+                        </div>
+
+                        <button
+                            onClick={exportDateRange}
+                            disabled={exportLoading || dayjs(fromDate).isAfter(dayjs(toDate))}
+                            style={{
+                                padding: '8px 16px',
+                                border: 'none',
+                                background: (exportLoading || dayjs(fromDate).isAfter(dayjs(toDate))) ? '#9ca3af' : '#10b981',
+                                color: '#fff',
+                                borderRadius: '6px',
+                                cursor: (exportLoading || dayjs(fromDate).isAfter(dayjs(toDate))) ? 'not-allowed' : 'pointer',
+                                fontSize: '14px',
+                                fontWeight: '500',
+                                opacity: (exportLoading || dayjs(fromDate).isAfter(dayjs(toDate))) ? 0.6 : 1
+                            }}
+                        >
+                            {exportLoading ? '⬇️ Downloading...' : '📥 Download Range'}
+                        </button>
+
                         <div style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: '16px'
+                            fontSize: '12px',
+                            color: dayjs(fromDate).isAfter(dayjs(toDate)) ? '#ef4444' : '#6b7280',
+                            fontWeight: '500'
                         }}>
+                            📅 {dayjs(fromDate).format('MMM DD, YYYY')} → {dayjs(toDate).format('MMM DD, YYYY')}
+                            {dayjs(fromDate).isAfter(dayjs(toDate)) && (
+                                <span style={{ color: '#ef4444', marginLeft: '8px' }}>⚠️ Invalid range</span>
+                            )}
+                        </div>
+                    </div>
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+                    {loading ? (
+                        <div style={{ padding: '40px', textAlign: 'center' }}>
                             <div style={{
-                                width: '40px',
-                                height: '40px',
-                                border: '4px solid #f3f4f6',
-                                borderTop: '4px solid #3b82f6',
-                                borderRadius: '50%',
-                                animation: 'spin 1s linear infinite'
-                            }} />
-                            <div style={{ fontSize: '16px', color: '#6b7280' }}>
-                                Loading availability data...
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                gap: '16px'
+                            }}>
+                                <div style={{
+                                    width: '40px',
+                                    height: '40px',
+                                    border: '4px solid #f3f4f6',
+                                    borderTop: '4px solid #3b82f6',
+                                    borderRadius: '50%',
+                                    animation: 'spin 1s linear infinite'
+                                }} />
+                                <div style={{ fontSize: '16px', color: '#6b7280' }}>
+                                    Loading availability data...
+                                </div>
+                            </div>
+                        </div>
+                    ) : error ? (
+                        <div style={{ padding: '40px', textAlign: 'center' }}>
+                            <div style={{
+                                fontSize: '16px',
+                                color: '#6b7280',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                gap: '8px'
+                            }}>
+                                <div style={{ fontSize: '24px' }}>📊</div>
+                                <div>{error}</div>
+                            </div>
+                        </div>
+                    ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 12 }}>
+                        <CalendarHeatmap
+                            availableDates={allAvailableDates.size > 0 ? allAvailableDates : availableDates}
+                            minDate={minDate}
+                            maxDate={maxDate}
+                            onRangeSelect={onRangeSelect}
+                            selectedRange={{ from: fromDate, to: toDate }}
+                            onDateRangeChange={(from, to) => {
+                                setFromDate(from);
+                                setToDate(to);
+                            }}
+                        />
+                        <div style={{ padding: '12px 16px' }}>
+                            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                                <button onClick={() => applyQuick(7)} className="chip" style={{ border: '1px solid var(--panel-border)', borderRadius: 999, padding: '4px 8px', background: '#fff' }}>Last 7d</button>
+                                <button onClick={() => applyQuick(30)} className="chip" style={{ border: '1px solid var(--panel-border)', borderRadius: 999, padding: '4px 8px', background: '#fff' }}>Last 30d</button>
+                                <button onClick={() => applyQuick(90)} className="chip" style={{ border: '1px solid var(--panel-border)', borderRadius: 999, padding: '4px 8px', background: '#fff' }}>Last 90d</button>
+                            </div>
+                            <MissingDaysList month={month} year={year} availableDates={availableDates} />
+                            <div style={{ marginTop: 10 }}>
+                                <button onClick={() => { setSel({ start: null, end: null }); }} style={{ background: 'transparent', border: 'none', color: 'var(--brand-600)', cursor: 'pointer' }}>Clear selection</button>
                             </div>
                         </div>
                     </div>
-                ) : error ? (
-                    <div style={{ padding: '40px', textAlign: 'center' }}>
-                        <div style={{
-                            fontSize: '16px',
-                            color: '#6b7280',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: '8px'
-                        }}>
-                            <div style={{ fontSize: '24px' }}>📊</div>
-                            <div>{error}</div>
-                        </div>
-                    </div>
-                ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 12 }}>
-                    <CalendarHeatmap month={month} year={year} availableDates={availableDates} minDate={minDate} maxDate={maxDate} onRangeSelect={onRangeSelect} />
-                    <div style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                            <button onClick={() => applyQuick(7)} className="chip" style={{ border: '1px solid var(--panel-border)', borderRadius: 999, padding: '4px 8px', background: '#fff' }}>Last 7d</button>
-                            <button onClick={() => applyQuick(30)} className="chip" style={{ border: '1px solid var(--panel-border)', borderRadius: 999, padding: '4px 8px', background: '#fff' }}>Last 30d</button>
-                            <button onClick={() => applyQuick(90)} className="chip" style={{ border: '1px solid var(--panel-border)', borderRadius: 999, padding: '4px 8px', background: '#fff' }}>Last 90d</button>
-                        </div>
-                        <MissingDaysList month={month} year={year} availableDates={availableDates} />
-                        <div style={{ marginTop: 10 }}>
-                            <button onClick={() => { setSel({ start: null, end: null }); }} style={{ background: 'transparent', border: 'none', color: 'var(--brand-600)', cursor: 'pointer' }}>Clear selection</button>
-                        </div>
-                    </div>
+                    )}
                 </div>
-                )}
                 <div className="av-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--panel-border)' }}>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <button
-                            className="download-button"
-                            disabled={!canApply || exportLoading}
-                            onClick={exportSelectedDays}
-                            style={{
-                                border: '1px solid var(--panel-border)',
-                                background: canApply && !exportLoading ? '#10b981' : '#f1f5f9',
-                                color: canApply && !exportLoading ? 'white' : '#9ca3af',
-                                borderRadius: 8,
-                                padding: '6px 12px',
-                                cursor: canApply && !exportLoading ? 'pointer' : 'not-allowed',
-                                fontSize: '14px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                transition: 'all 0.2s ease'
-                            }}
-                            title={!canApply ? 'Select dates first' : 'Download selected date range'}
-                        >
-                            {exportLoading ? '⏳' : '📥'} Download Selected
-                        </button>
                         <button
                             className="download-button"
                             disabled={exportLoading}
