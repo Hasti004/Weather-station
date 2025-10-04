@@ -284,6 +284,82 @@ export default function StationPage() {
                             <div style={{ marginBottom: 12 }}>
                                 <TimeFilterToolbar value={filter} onChange={setFilter} />
                             </div>
+
+                            {/* Summary Cards */}
+                            {archiveData && archiveData.length > 0 && (
+                                <div style={{
+                                    display: 'flex',
+                                    gap: '12px',
+                                    marginBottom: '16px',
+                                    flexWrap: 'wrap',
+                                    justifyContent: 'center'
+                                }}>
+                                    {(() => {
+                                        const data = archiveData || [];
+                                        const tempData = data.map(r => r.temperature_c).filter(v => v != null);
+                                        const humidityData = data.map(r => r.humidity_pct).filter(v => v != null);
+                                        const rainfallData = data.map(r => r.rainfall_mm).filter(v => v != null);
+                                        const pressureData = data.map(r => r.pressure_hpa).filter(v => v != null);
+                                        const windData = data.map(r => r.windspeed_ms).filter(v => v != null);
+
+                                        const getStats = (values) => {
+                                            if (values.length === 0) return { min: '—', max: '—', avg: '—' };
+                                            const min = Math.min(...values).toFixed(1);
+                                            const max = Math.max(...values).toFixed(1);
+                                            const avg = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1);
+                                            return { min, max, avg };
+                                        };
+
+                                        const tempStats = getStats(tempData);
+                                        const humidityStats = getStats(humidityData);
+                                        const rainfallStats = getStats(rainfallData);
+                                        const pressureStats = getStats(pressureData);
+                                        const windStats = getStats(windData);
+
+                                        return [
+                                            { label: 'Temperature', unit: '°C', stats: tempStats, color: '#ef4444' },
+                                            { label: 'Humidity', unit: '%', stats: humidityStats, color: '#3b82f6' },
+                                            { label: 'Rainfall', unit: 'mm', stats: rainfallStats, color: '#10b981' },
+                                            { label: 'Pressure', unit: 'hPa', stats: pressureStats, color: '#8b5cf6' },
+                                            { label: 'Wind Speed', unit: 'm/s', stats: windStats, color: '#f59e0b' }
+                                        ].map((item, index) => (
+                                            <div key={index} style={{
+                                                background: 'white',
+                                                border: '1px solid #e5e7eb',
+                                                borderRadius: '8px',
+                                                padding: '12px',
+                                                minWidth: '140px',
+                                                flex: '1',
+                                                maxWidth: '180px',
+                                                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+                                            }}>
+                                                <div style={{
+                                                    fontSize: '12px',
+                                                    fontWeight: '600',
+                                                    color: item.color,
+                                                    marginBottom: '8px',
+                                                    textAlign: 'center'
+                                                }}>
+                                                    {item.label}
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#6b7280', marginBottom: '2px' }}>
+                                                    <span>Min:</span>
+                                                    <span>{item.stats.min} {item.unit}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#6b7280', marginBottom: '2px' }}>
+                                                    <span>Max:</span>
+                                                    <span>{item.stats.max} {item.unit}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#6b7280', fontWeight: '600' }}>
+                                                    <span>Avg:</span>
+                                                    <span>{item.stats.avg} {item.unit}</span>
+                                                </div>
+                                            </div>
+                                        ));
+                                    })()}
+                                </div>
+                            )}
+
                             <GraphBuilder availableFields={FIELD_META} hasWindDir={true} selection={graphSel} onChange={setGraphSel} />
                         </div>
                         {archiveError ? (
@@ -292,9 +368,6 @@ export default function StationPage() {
                             <div className="skeleton" style={{ height: 220, marginTop: 16 }} />
                         ) : (
                             <>
-                                <div style={{ marginTop: 12, marginBottom: 8 }}>
-                                    <TimeFilterToolbar value={filter} onChange={setFilter} />
-                                </div>
                                 {graphSel.charts.temperature && (
                                     <ChartPanel title="Temperature" avgLabel="Avg" avgValue={buildSeries((archiveData || []).map(r => ({ dt: new Date(r.reading_ts), temperature_c: r.temperature_c })), 'day', 'daily', 'temperature_c', 'avg').avg}>
                                         <TemperatureChart data={buildSeries((archiveData || []).map(r => ({ dt: new Date(r.reading_ts), temperature_c: r.temperature_c })), 'day', 'daily', 'temperature_c', 'avg')} unit="°C" />
