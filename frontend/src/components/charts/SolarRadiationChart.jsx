@@ -1,14 +1,14 @@
 import React from 'react';
 import { Line } from 'react-chartjs-2';
 
-export default function VisibilityChart({ data, unit = 'km' }) {
+export default function SolarRadiationChart({ data, unit = 'W/m²' }) {
     const chartData = {
         labels: data.labels || [],
         datasets: [{
-            label: `Visibility (${unit})`,
+            label: `Solar Radiation (${unit})`,
             data: data.series || [],
-            borderColor: '#8b5cf6',
-            backgroundColor: 'rgba(139, 92, 246, 0.1)',
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
             borderWidth: 2,
             fill: true,
             tension: 0.4

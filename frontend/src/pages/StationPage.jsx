@@ -15,6 +15,11 @@ import HumidityChart from '../components/HumidityChart';
 import PressureChart from '../components/charts/PressureChart';
 import WindSpeedChart from '../components/charts/WindSpeedChart';
 import WindRoseChart from '../components/charts/WindRoseChart';
+import VisibilityChart from '../components/charts/VisibilityChart';
+import SolarRadiationChart from '../components/charts/SolarRadiationChart';
+import IndoorTemperatureChart from '../components/charts/IndoorTemperatureChart';
+import IndoorHumidityChart from '../components/charts/IndoorHumidityChart';
+import RainDayChart from '../components/charts/RainDayChart';
 import GraphBuilder from '../components/GraphBuilder/GraphBuilder';
 import { FIELD_META, DEFAULT_X } from '../utils/fields';
 import { buildSeries } from '../utils/aggregate';
@@ -301,6 +306,11 @@ export default function StationPage() {
                                         const rainfallData = data.map(r => r.rainfall_mm).filter(v => v != null);
                                         const pressureData = data.map(r => r.pressure_hpa).filter(v => v != null);
                                         const windData = data.map(r => r.windspeed_ms).filter(v => v != null);
+                                        const visibilityData = data.map(r => r.visibility_km).filter(v => v != null);
+                                        const tempInData = data.map(r => r.temp_in_c).filter(v => v != null);
+                                        const humInData = data.map(r => r.hum_in).filter(v => v != null);
+                                        const rainDayData = data.map(r => r.rainday).filter(v => v != null);
+                                        const solarData = data.map(r => r.solar_rad).filter(v => v != null);
 
                                         const getStats = (values) => {
                                             if (values.length === 0) return { min: '—', max: '—', avg: '—' };
@@ -315,14 +325,26 @@ export default function StationPage() {
                                         const rainfallStats = getStats(rainfallData);
                                         const pressureStats = getStats(pressureData);
                                         const windStats = getStats(windData);
+                                        const visibilityStats = getStats(visibilityData);
+                                        const tempInStats = getStats(tempInData);
+                                        const humInStats = getStats(humInData);
+                                        const rainDayStats = getStats(rainDayData);
+                                        const solarStats = getStats(solarData);
 
-                                        return [
-                                            { label: 'Temperature', unit: '°C', stats: tempStats, color: '#ef4444' },
-                                            { label: 'Humidity', unit: '%', stats: humidityStats, color: '#3b82f6' },
-                                            { label: 'Rainfall', unit: 'mm', stats: rainfallStats, color: '#10b981' },
-                                            { label: 'Pressure', unit: 'hPa', stats: pressureStats, color: '#8b5cf6' },
-                                            { label: 'Wind Speed', unit: 'm/s', stats: windStats, color: '#f59e0b' }
-                                        ].map((item, index) => (
+                                        const allStats = [
+                                            { label: 'Temperature', unit: '°C', stats: tempStats, color: '#ef4444', hasData: tempData.length > 0 },
+                                            { label: 'Humidity', unit: '%', stats: humidityStats, color: '#3b82f6', hasData: humidityData.length > 0 },
+                                            { label: 'Rainfall', unit: 'mm', stats: rainfallStats, color: '#10b981', hasData: rainfallData.length > 0 },
+                                            { label: 'Pressure', unit: 'hPa', stats: pressureStats, color: '#8b5cf6', hasData: pressureData.length > 0 },
+                                            { label: 'Wind Speed', unit: 'm/s', stats: windStats, color: '#f59e0b', hasData: windData.length > 0 },
+                                            { label: 'Visibility', unit: 'km', stats: visibilityStats, color: '#8b5cf6', hasData: visibilityData.length > 0 },
+                                            { label: 'Indoor Temp', unit: '°C', stats: tempInStats, color: '#ef4444', hasData: tempInData.length > 0 },
+                                            { label: 'Indoor Humidity', unit: '%', stats: humInStats, color: '#3b82f6', hasData: humInData.length > 0 },
+                                            { label: 'Rain Day', unit: 'mm', stats: rainDayStats, color: '#10b981', hasData: rainDayData.length > 0 },
+                                            { label: 'Solar Radiation', unit: 'W/m²', stats: solarStats, color: '#f59e0b', hasData: solarData.length > 0 }
+                                        ].filter(item => item.hasData);
+
+                                        return allStats.map((item, index) => (
                                             <div key={index} style={{
                                                 background: 'white',
                                                 border: '1px solid #e5e7eb',
@@ -396,12 +418,42 @@ export default function StationPage() {
                                 {graphSel.charts.winddir && (
                                     <ChartPanel title="Wind Rose">
                                         {archiveData && archiveData.length > 0 ? (
-                                            <WindRoseChart rows={archiveData.map(r => ({ WindDir: r.wind_dir, 'WindSpeed(m/s)': r.windspeed_ms }))} />
+                                            <WindRoseChart rows={archiveData
+                                                .filter(r => r.wind_dir != null && r.windspeed_ms != null)
+                                                .map(r => ({
+                                                    WindDir: r.wind_dir,
+                                                    'WindSpeed(m/s)': r.windspeed_ms
+                                                }))} />
                                         ) : (
                                             <div style={{ padding: 20, textAlign: 'center', color: '#64748B' }}>
-                                                Select a time range to load wind direction data
+                                                {archiveLoading ? 'Loading wind data...' : 'Select a time range to load wind direction data'}
                                             </div>
                                         )}
+                                    </ChartPanel>
+                                )}
+                                {graphSel.charts.visibility && (
+                                    <ChartPanel title="Visibility" avgLabel="Avg" avgValue={buildSeries((archiveData || []).map(r => ({ dt: new Date(r.reading_ts), visibility_km: r.visibility_km || 0 })), 'day', 'daily', 'visibility_km', 'avg').avg}>
+                                        <VisibilityChart data={buildSeries((archiveData || []).map(r => ({ dt: new Date(r.reading_ts), visibility_km: r.visibility_km || 0 })), 'day', 'daily', 'visibility_km', 'avg')} unit="km" />
+                                    </ChartPanel>
+                                )}
+                                {graphSel.charts.tempin && (
+                                    <ChartPanel title="Temperature Inside" avgLabel="Avg" avgValue={buildSeries((archiveData || []).map(r => ({ dt: new Date(r.reading_ts), temp_in_c: r.temp_in_c || 0 })), 'day', 'daily', 'temp_in_c', 'avg').avg}>
+                                        <IndoorTemperatureChart data={buildSeries((archiveData || []).map(r => ({ dt: new Date(r.reading_ts), temp_in_c: r.temp_in_c || 0 })), 'day', 'daily', 'temp_in_c', 'avg')} unit="°C" />
+                                    </ChartPanel>
+                                )}
+                                {graphSel.charts.humin && (
+                                    <ChartPanel title="Humidity Inside" avgLabel="Avg" avgValue={buildSeries((archiveData || []).map(r => ({ dt: new Date(r.reading_ts), hum_in: r.hum_in || 0 })), 'day', 'daily', 'hum_in', 'avg').avg}>
+                                        <IndoorHumidityChart data={buildSeries((archiveData || []).map(r => ({ dt: new Date(r.reading_ts), hum_in: r.hum_in || 0 })), 'day', 'daily', 'hum_in', 'avg')} unit="%" />
+                                    </ChartPanel>
+                                )}
+                                {graphSel.charts.rainday && (
+                                    <ChartPanel title="Rain Day" avgLabel="Total" avgValue={buildSeries((archiveData || []).map(r => ({ dt: new Date(r.reading_ts), rainfall_mm: r.rainfall_mm || 0 })), 'day', 'daily', 'rainfall_mm', 'sum').sum}>
+                                        <RainDayChart data={buildSeries((archiveData || []).map(r => ({ dt: new Date(r.reading_ts), rainfall_mm: r.rainfall_mm || 0 })), 'day', 'daily', 'rainfall_mm', 'sum')} unit="mm" />
+                                    </ChartPanel>
+                                )}
+                                {graphSel.charts.solarrad && (
+                                    <ChartPanel title="Solar Radiation" avgLabel="Avg" avgValue={buildSeries((archiveData || []).map(r => ({ dt: new Date(r.reading_ts), solar_rad: r.solar_rad || 0 })), 'day', 'daily', 'solar_rad', 'avg').avg}>
+                                        <SolarRadiationChart data={buildSeries((archiveData || []).map(r => ({ dt: new Date(r.reading_ts), solar_rad: r.solar_rad || 0 })), 'day', 'daily', 'solar_rad', 'avg')} unit="W/m²" />
                                     </ChartPanel>
                                 )}
                             </>

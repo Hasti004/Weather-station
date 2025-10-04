@@ -7,6 +7,7 @@ export default function TimeFilterToolbar({ value, onChange }) {
     const [error, setError] = React.useState(null);
     const [changed, setChanged] = React.useState(false);
     const [showCustomPopup, setShowCustomPopup] = React.useState(false);
+    const [isApplied, setIsApplied] = React.useState(false);
 
     React.useEffect(() => {
         setDraft(value);
@@ -125,9 +126,17 @@ export default function TimeFilterToolbar({ value, onChange }) {
 
     const doApply = (state) => {
         if (!validate(state)) return;
+
+        // Show light blue indicator
+        setIsApplied(true);
         onChange(state);
         announce('Charts updated');
         setChanged(false);
+
+        // Reset indicator after 2 seconds
+        setTimeout(() => {
+            setIsApplied(false);
+        }, 2000);
     };
 
     const handleCustomApply = () => {
@@ -224,15 +233,17 @@ export default function TimeFilterToolbar({ value, onChange }) {
                     disabled={isApplyDisabled}
                     style={{
                         border: '1px solid var(--brand-600)',
-                        background: isApplyDisabled ? '#e5e7eb' : 'var(--brand-600)',
+                        background: isApplyDisabled ? '#e5e7eb' : (isApplied ? '#3b82f6' : 'var(--brand-600)'),
                         color: isApplyDisabled ? '#9ca3af' : 'white',
                         borderRadius: 8,
                         padding: '6px 12px',
-                        cursor: isApplyDisabled ? 'not-allowed' : 'pointer'
+                        cursor: isApplyDisabled ? 'not-allowed' : 'pointer',
+                        transition: 'background-color 0.3s ease',
+                        boxShadow: isApplied ? '0 2px 8px rgba(59, 130, 246, 0.3)' : 'none'
                     }}
                     aria-disabled={isApplyDisabled}
                 >
-                    Apply
+                    {isApplied ? '✓ Applied' : 'Apply'}
                 </button>
             </div>
 

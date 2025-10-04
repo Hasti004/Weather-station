@@ -1,17 +1,15 @@
 import React from 'react';
-import { Line } from 'react-chartjs-2';
+import { Bar } from 'react-chartjs-2';
 
-export default function VisibilityChart({ data, unit = 'km' }) {
+export default function RainDayChart({ data, unit = 'mm' }) {
     const chartData = {
         labels: data.labels || [],
         datasets: [{
-            label: `Visibility (${unit})`,
+            label: `Daily Rainfall (${unit})`,
             data: data.series || [],
-            borderColor: '#8b5cf6',
-            backgroundColor: 'rgba(139, 92, 246, 0.1)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.4
+            backgroundColor: '#10b981',
+            borderColor: '#059669',
+            borderWidth: 1
         }]
     };
 
@@ -40,5 +38,5 @@ export default function VisibilityChart({ data, unit = 'km' }) {
         }
     };
 
-    return <Line data={chartData} options={options} />;
+    return <Bar data={chartData} options={options} />;
 }

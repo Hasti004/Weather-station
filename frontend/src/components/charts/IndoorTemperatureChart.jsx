@@ -1,14 +1,14 @@
 import React from 'react';
 import { Line } from 'react-chartjs-2';
 
-export default function VisibilityChart({ data, unit = 'km' }) {
+export default function IndoorTemperatureChart({ data, unit = '°C' }) {
     const chartData = {
         labels: data.labels || [],
         datasets: [{
-            label: `Visibility (${unit})`,
+            label: `Indoor Temperature (${unit})`,
             data: data.series || [],
-            borderColor: '#8b5cf6',
-            backgroundColor: 'rgba(139, 92, 246, 0.1)',
+            borderColor: '#ef4444',
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
             borderWidth: 2,
             fill: true,
             tension: 0.4
@@ -30,7 +30,6 @@ export default function VisibilityChart({ data, unit = 'km' }) {
                 grid: { color: 'var(--grid)' }
             },
             y: {
-                beginAtZero: true,
                 ticks: { color: 'var(--axis)' },
                 grid: { color: 'var(--grid)' }
             }

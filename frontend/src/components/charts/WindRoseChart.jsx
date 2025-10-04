@@ -4,7 +4,13 @@ import { COMPASS_16, binWindDirections, calculateDatasetVectorAverageWindDirecti
 
 export default function WindRoseChart({ rows, weightedDefault = false }) {
     const [weighted, setWeighted] = useState(weightedDefault);
-    const adapted = useMemo(() => (rows || []).map(r => ({ wind_dir_deg: r.WindDir, windspeed_ms: r['WindSpeed(m/s)'] })), [rows]);
+    const adapted = useMemo(() => {
+        console.log('[WindRoseChart] Raw rows:', rows);
+        const mapped = (rows || []).map(r => ({ wind_dir_deg: r.WindDir, windspeed_ms: r['WindSpeed(m/s)'] }));
+        console.log('[WindRoseChart] Mapped data:', mapped);
+        console.log('[WindRoseChart] Valid wind directions:', mapped.filter(r => typeof r.wind_dir_deg === 'number' && Number.isFinite(r.wind_dir_deg)).length);
+        return mapped;
+    }, [rows]);
     const counts = useMemo(() => binWindDirections(adapted, weighted), [adapted, weighted]);
 
     // Calculate vector-based average wind direction

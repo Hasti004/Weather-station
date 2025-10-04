@@ -1,14 +1,14 @@
 import React from 'react';
 import { Line } from 'react-chartjs-2';
 
-export default function VisibilityChart({ data, unit = 'km' }) {
+export default function IndoorHumidityChart({ data, unit = '%' }) {
     const chartData = {
         labels: data.labels || [],
         datasets: [{
-            label: `Visibility (${unit})`,
+            label: `Indoor Humidity (${unit})`,
             data: data.series || [],
-            borderColor: '#8b5cf6',
-            backgroundColor: 'rgba(139, 92, 246, 0.1)',
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
             borderWidth: 2,
             fill: true,
             tension: 0.4
@@ -31,6 +31,7 @@ export default function VisibilityChart({ data, unit = 'km' }) {
             },
             y: {
                 beginAtZero: true,
+                max: 100,
                 ticks: { color: 'var(--axis)' },
                 grid: { color: 'var(--grid)' }
             }
