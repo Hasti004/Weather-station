@@ -313,6 +313,7 @@ def translate_reading_to_frontend(row: Dict[str, Any]) -> Dict[str, Any]:
     """
     Translate database reading row to frontend-friendly format.
     Maps ingestion schema columns to user-friendly frontend keys.
+    Handles both weather_stations schema and observatory schema.
     """
     if not row:
         return row
@@ -320,30 +321,48 @@ def translate_reading_to_frontend(row: Dict[str, Any]) -> Dict[str, Any]:
     # Create a copy to avoid modifying the original
     translated = dict(row)
 
+    # Detect which schema we're using
+    has_obs_id = 'obs_id' in translated
+    has_station_id = 'station_id' in translated
+
     # Map database columns to frontend-friendly keys
+    # Handle both weather_stations schema and observatory schema
     column_mapping = {
-        'station_id': 'station_id',  # Keep as-is
-        'timestamp': 'reading_ts',   # Frontend expects reading_ts
-        'temp_out_c': 'temperature_c',
-        'hum_out': 'humidity_pct',
-        'rain_day_mm': 'rainfall_mm',
-        'barometer_hpa': 'pressure_hpa',
-        'wind_speed_ms': 'windspeed_ms',
-        'battery_status': 'battery_pct',
+        'station_id': 'station_id',  # Keep as-is (weather_stations schema)
+        'obs_id': 'obs_id',          # Keep as-is (observatory schema)
+        'timestamp': 'reading_ts',   # weather_stations schema
+        'reading_ts': 'reading_ts', # observatory schema (already correct)
+        'temp_out_c': 'temperature_c',  # weather_stations
+        'temperature_c': 'temperature_c', # observatory (already correct)
+        'hum_out': 'humidity_pct',      # weather_stations
+        'humidity_pct': 'humidity_pct', # observatory (already correct)
+        'rain_day_mm': 'rainfall_mm',   # weather_stations
+        'rainfall_mm': 'rainfall_mm',   # observatory (already correct)
+        'barometer_hpa': 'pressure_hpa', # weather_stations
+        'pressure_hpa': 'pressure_hpa',  # observatory (already correct)
+        'wind_speed_ms': 'windspeed_ms', # weather_stations
+        'windspeed_ms': 'windspeed_ms',  # observatory (already correct)
+        'battery_status': 'battery_pct',  # weather_stations
+        'battery_pct': 'battery_pct',    # observatory (already correct)
         'battery_volts': 'battery_voltage_v',
+        'battery_voltage_v': 'battery_voltage_v', # observatory (already correct)
         'temp_in_c': 'temp_in_c',    # Keep as-is
         'hum_in': 'hum_in',          # Keep as-is
         'rain_rate_mm_hr': 'rain_rate_mm_hr',  # Keep as-is
         'solar_rad': 'solar_rad',    # Keep as-is
         'sunrise': 'sunrise',        # Keep as-is
         'sunset': 'sunset',          # Keep as-is
-        'wind_dir': 'wind_dir',      # Keep as-is
+        'wind_dir': 'wind_dir',      # Keep as-is (both schemas)
     }
 
     # Apply translations
     for db_key, frontend_key in column_mapping.items():
-        if db_key in translated:
+        if db_key in translated and db_key != frontend_key:
             translated[frontend_key] = translated.pop(db_key)
+
+    # Ensure wind_dir is always included (even if NULL) for wind rose compatibility
+    if 'wind_dir' not in translated:
+        translated['wind_dir'] = None
 
     # Serialize datetime objects
     for key, value in translated.items():
@@ -479,15 +498,41 @@ def range_obs(
             """
             results = query(sql, (start_ts, end_ts, limit))
         else:
-            sql = """
-            SELECT r.*, s.name as station_name, s.location
-            FROM readings r
-            JOIN stations s ON r.station_id = s.station_id
-            WHERE r.station_id = %s AND r.timestamp >= %s AND r.timestamp < %s
-            ORDER BY r.timestamp
-            LIMIT %s
-            """
-            results = query(sql, (station_id, start_ts, end_ts, limit))
+            # Check which database schema we're using and adjust query accordingly
+            # Try weather_stations schema first (has stations table), fallback to observatory schema
+            try:
+                sql = """
+                SELECT r.*, s.name as station_name, s.location
+                FROM readings r
+                JOIN stations s ON r.station_id = s.station_id
+                WHERE r.station_id = %s AND r.timestamp >= %s AND r.timestamp < %s
+                ORDER BY r.timestamp
+                LIMIT %s
+                """
+                results = query(sql, (station_id, start_ts, end_ts, limit))
+            except Exception as e:
+                # Fallback to observatory schema (uses obs_id instead of station_id)
+                logger.warning(f"Trying observatory schema fallback: {e}")
+                # Map station_id to obs_id
+                obs_id_map = {1: 'udi', 2: 'ahm', 3: 'mtabu'}
+                obs_id = obs_id_map.get(int(station_id))
+                if obs_id:
+                    sql = """
+                    SELECT r.*, o.name as station_name, o.location
+                    FROM readings r
+                    JOIN observatories o ON r.obs_id = o.obs_id
+                    WHERE r.obs_id = %s AND r.reading_ts >= %s AND r.reading_ts < %s
+                    ORDER BY r.reading_ts
+                    LIMIT %s
+                    """
+                    results = query(sql, (obs_id, start_ts, end_ts, limit))
+                else:
+                    raise
+
+            # Log wind_dir data availability for debugging
+            if results:
+                wind_dir_count = sum(1 for row in results if row.get('wind_dir') is not None and row.get('wind_dir') != '')
+                logger.info(f"Wind direction data: {wind_dir_count}/{len(results)} rows have wind_dir values")
 
         # Translate to frontend format
         translated_results = []

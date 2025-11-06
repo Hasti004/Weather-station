@@ -1,14 +1,28 @@
 import React, { useMemo, useState } from 'react';
 import { PolarArea } from 'react-chartjs-2';
-import { COMPASS_16, binWindDirections, calculateDatasetVectorAverageWindDirection } from '../../utils/wind';
+import { COMPASS_16, binWindDirections, calculateDatasetVectorAverageWindDirection, normalizeWindDirectionToDegrees } from '../../utils/wind';
 
 export default function WindRoseChart({ rows, weightedDefault = false }) {
     const [weighted, setWeighted] = useState(weightedDefault);
     const adapted = useMemo(() => {
-        console.log('[WindRoseChart] Raw rows:', rows);
-        const mapped = (rows || []).map(r => ({ wind_dir_deg: r.WindDir, windspeed_ms: r['WindSpeed(m/s)'] }));
-        console.log('[WindRoseChart] Mapped data:', mapped);
-        console.log('[WindRoseChart] Valid wind directions:', mapped.filter(r => typeof r.wind_dir_deg === 'number' && Number.isFinite(r.wind_dir_deg)).length);
+        console.log('[WindRoseChart] Raw rows received:', rows?.length || 0, 'rows');
+        if (rows && rows.length > 0) {
+            console.log('[WindRoseChart] Sample raw row:', rows[0]);
+        }
+        const mapped = (rows || []).map(r => {
+            const windDirDeg = normalizeWindDirectionToDegrees(r.WindDir);
+            const windSpeed = typeof r['WindSpeed(m/s)'] === 'number' ? r['WindSpeed(m/s)'] : parseFloat(r['WindSpeed(m/s)']) || null;
+            return {
+                wind_dir_deg: windDirDeg,
+                windspeed_ms: windSpeed
+            };
+        });
+        const validWindDirs = mapped.filter(r => typeof r.wind_dir_deg === 'number' && Number.isFinite(r.wind_dir_deg));
+        console.log('[WindRoseChart] Mapped data:', mapped.slice(0, 5));
+        console.log('[WindRoseChart] Valid wind directions:', validWindDirs.length, 'out of', mapped.length);
+        if (validWindDirs.length === 0 && mapped.length > 0) {
+            console.warn('[WindRoseChart] No valid wind directions found! Sample normalized values:', mapped.slice(0, 10).map(r => r.wind_dir_deg));
+        }
         return mapped;
     }, [rows]);
     const counts = useMemo(() => binWindDirections(adapted, weighted), [adapted, weighted]);

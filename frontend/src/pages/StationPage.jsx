@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { Footer } from '../components/Footer';
@@ -40,7 +40,7 @@ export default function StationPage() {
     const [liveData, setLiveData] = useState(null);
     const [archiveData, setArchiveData] = useState(null);
     const [liveLoading, setLiveLoading] = useState(true);
-    const [archiveLoading, setArchiveLoading] = useState(false);
+    const [archiveLoading, setArchiveLoading] = useState(true); // Start as true to show loading state initially
     const [liveError, setLiveError] = useState(null);
     const [archiveError, setArchiveError] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(null);
@@ -61,7 +61,7 @@ export default function StationPage() {
         }
         if (filter.mode === 'monthly') {
             const start = new Date(now);
-            start.setDate(start.getDate() - 7); // Use last 7 days instead of full month
+            start.setDate(start.getDate() - 60); // Use last 60 days to increase chances of finding wind_dir data
             return { start, end: now };
         }
         if (filter.start && filter.end) return { start: filter.start, end: filter.end };
@@ -90,8 +90,12 @@ export default function StationPage() {
         }
     }, [liveOne, liveHookError, liveHookLoading, lastUpdatedIso]);
 
-    // Load archive data
-    const loadArchiveData = async () => {
+    // Load archive data - wrapped in useCallback to avoid dependency issues
+    const loadArchiveData = useCallback(async () => {
+        if (!id || !resolvedRange.start || !resolvedRange.end) {
+            return;
+        }
+
         try {
             setArchiveError(null);
             setArchiveLoading(true);
@@ -113,6 +117,7 @@ export default function StationPage() {
 
             console.log(`[StationPage] Fetching range data: ${start} to ${end}`);
             const result = await fetchRange(stationId, start, end);
+            console.log(`[StationPage] Loaded ${result.data?.length || 0} records`);
             setArchiveData(result.data || []);
         } catch (err) {
             console.error('[StationPage] Range fetch error:', err);
@@ -120,60 +125,12 @@ export default function StationPage() {
         } finally {
             setArchiveLoading(false);
         }
-    };
-
-    // Remove old manual polling; handled by hook
-
-    // Load archive data when range changes
-    useEffect(() => {
-        if (resolvedRange.start && resolvedRange.end) {
-            loadArchiveData();
-        }
     }, [id, resolvedRange]);
 
-    // Load initial data on component mount
+    // Load archive data when range changes (including initial load)
     useEffect(() => {
-        if (!alias) return;
-
-        const loadInitialData = async () => {
-            setArchiveLoading(true);
-            setArchiveError(null);
-
-            try {
-                const stationId = STATION_ID_MAP[alias];
-
-                // Format dates properly for the API
-                const formatDate = (date) => {
-                    const year = date.getFullYear();
-                    const month = String(date.getMonth() + 1).padStart(2, '0');
-                    const day = String(date.getDate()).padStart(2, '0');
-                    const hours = String(date.getHours()).padStart(2, '0');
-                    const minutes = String(date.getMinutes()).padStart(2, '0');
-                    const seconds = String(date.getSeconds()).padStart(2, '0');
-                    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
-                };
-
-                // Load last 30 days by default for better wind rose visualization
-                const end = new Date();
-                const start = new Date();
-                start.setDate(start.getDate() - 30);
-
-                const startStr = formatDate(start);
-                const endStr = formatDate(end);
-
-                console.log(`[StationPage] Loading initial data: ${startStr} to ${endStr}`);
-                const result = await fetchRange(stationId, startStr, endStr);
-                setArchiveData(result.data || []);
-            } catch (err) {
-                console.error('[StationPage] Initial data load error:', err);
-                setArchiveError(handleApiError(err));
-            } finally {
-                setArchiveLoading(false);
-            }
-        };
-
-        loadInitialData();
-    }, [alias]);
+        loadArchiveData();
+    }, [loadArchiveData]);
 
     const [graphSel, setGraphSel] = useState({
         xKey: DEFAULT_X,
@@ -417,14 +374,65 @@ export default function StationPage() {
                                 )}
                                 {graphSel.charts.winddir && (
                                     <ChartPanel title="Wind Rose">
-                                        {archiveData && archiveData.length > 0 ? (
-                                            <WindRoseChart rows={archiveData
-                                                .filter(r => r.wind_dir != null && r.windspeed_ms != null)
+                                        {archiveData && archiveData.length > 0 ? (() => {
+                                            const filteredRows = archiveData
+                                                .filter(r => {
+                                                    // Keep rows that have wind direction data (even if it's a string like "N" or "NE")
+                                                    // Allow 0 as a valid wind direction (North)
+                                                    const hasWindDir = r.wind_dir != null &&
+                                                                      r.wind_dir !== '' &&
+                                                                      r.wind_dir !== 'NA' &&
+                                                                      r.wind_dir !== 'NAN' &&
+                                                                      (typeof r.wind_dir === 'number' ? true : String(r.wind_dir).trim() !== '');
+                                                    const hasWindSpeed = r.windspeed_ms != null && r.windspeed_ms !== '';
+                                                    return hasWindDir && hasWindSpeed;
+                                                })
                                                 .map(r => ({
                                                     WindDir: r.wind_dir,
                                                     'WindSpeed(m/s)': r.windspeed_ms
-                                                }))} />
-                                        ) : (
+                                                }));
+
+                                            // Debug logging - more detailed
+                                            if (archiveData.length > 0) {
+                                                const windDirCount = archiveData.filter(r => r.wind_dir != null && r.wind_dir !== '').length;
+                                                const sampleRows = archiveData.slice(0, 5).map(r => ({
+                                                    timestamp: r.reading_ts,
+                                                    wind_dir: r.wind_dir,
+                                                    wind_dir_type: typeof r.wind_dir,
+                                                    wind_dir_value: r.wind_dir,
+                                                    has_wind_dir_key: 'wind_dir' in r,
+                                                    all_keys: Object.keys(r),
+                                                    windspeed_ms: r.windspeed_ms
+                                                }));
+                                                console.log(`[StationPage] Wind Rose Debug:`);
+                                                console.log(`  - Total rows loaded: ${archiveData.length}`);
+                                                console.log(`  - Rows with wind_dir: ${windDirCount}`);
+                                                console.log(`  - Filtered rows (has wind_dir + wind_speed): ${filteredRows.length}`);
+                                                console.log(`  - Sample rows (first 5):`, sampleRows);
+                                                console.log(`  - First 10 wind_dir values:`, archiveData.slice(0, 10).map(r => ({ wind_dir: r.wind_dir, type: typeof r.wind_dir, is_null: r.wind_dir === null, is_undefined: r.wind_dir === undefined })));
+                                                console.log(`  - Keys in first row:`, Object.keys(archiveData[0] || {}));
+                                            }
+
+                                            // If no filtered rows, show helpful message
+                                            if (filteredRows.length === 0 && archiveData.length > 0) {
+                                                const hasAnyWindDir = archiveData.some(r => {
+                                                    const wd = r.wind_dir;
+                                                    return wd != null && wd !== '' && wd !== 'NA' && wd !== 'NAN';
+                                                });
+                                                return (
+                                                    <div style={{ padding: 20, textAlign: 'center', color: '#64748B' }}>
+                                                        <div style={{ marginBottom: 8 }}>No wind direction data available for this time range.</div>
+                                                        <div style={{ fontSize: 14, color: '#94a3b8' }}>
+                                                            {hasAnyWindDir
+                                                                ? 'Try selecting a different date range using the date picker above.'
+                                                                : 'Wind direction data may not be available in the database. Check if older records have wind direction values.'}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return <WindRoseChart rows={filteredRows} />;
+                                        })() : (
                                             <div style={{ padding: 20, textAlign: 'center', color: '#64748B' }}>
                                                 {archiveLoading ? 'Loading wind data...' : 'Select a time range to load wind direction data'}
                                             </div>

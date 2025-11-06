@@ -40,6 +40,65 @@ export function radiansToDegrees(radians: number): number {
 }
 
 /**
+ * Convert wind direction to degrees
+ * Handles:
+ * - Numeric values (degrees): returns as-is
+ * - Numeric strings: converts to number
+ * - Compass directions (N, NE, etc.): converts to degrees
+ * - Null/undefined/invalid: returns null
+ */
+export function normalizeWindDirectionToDegrees(value: any): number | null {
+    if (value === null || value === undefined || value === '') {
+        return null;
+    }
+
+    // If it's already a number
+    if (typeof value === 'number') {
+        if (isNaN(value) || !isFinite(value)) {
+            return null;
+        }
+        return value;
+    }
+
+    // If it's a string, try to parse
+    if (typeof value === 'string') {
+        const trimmed = value.trim().toUpperCase();
+
+        // Try to parse as number first
+        const numValue = parseFloat(trimmed);
+        if (!isNaN(numValue) && isFinite(numValue)) {
+            return numValue;
+        }
+
+        // Map compass directions to degrees
+        const compassMap: Record<string, number> = {
+            'N': 0,
+            'NNE': 22.5,
+            'NE': 45,
+            'ENE': 67.5,
+            'E': 90,
+            'ESE': 112.5,
+            'SE': 135,
+            'SSE': 157.5,
+            'S': 180,
+            'SSW': 202.5,
+            'SW': 225,
+            'WSW': 247.5,
+            'W': 270,
+            'WNW': 292.5,
+            'NW': 315,
+            'NNW': 337.5,
+        };
+
+        if (compassMap.hasOwnProperty(trimmed)) {
+            return compassMap[trimmed];
+        }
+    }
+
+    return null;
+}
+
+/**
  * Calculate vector-based average wind direction
  * Converts wind directions to unit vectors, averages them, and converts back
  */
