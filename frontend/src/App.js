@@ -7,6 +7,7 @@ import HomePage from './pages/HomePage';
 import StationPage from './pages/StationPage';
 import TestPage from './pages/TestPage.js';
 import ContactPage from './pages/ContactPage';
+import DataViewPage from './pages/DataViewPage';
 // ErrorBoundary is now applied globally in index.js. Do not wrap here to avoid duplication.
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
           <Route path="/station/:id" element={<StationPage />} />
           <Route path="/test" element={<TestPage />} />
           <Route path="/contact" element={<ContactPage />} />
+          <Route path="/data" element={<DataViewPage />} />
         </Routes>
       </BrowserRouter>
     </QueryProvider>

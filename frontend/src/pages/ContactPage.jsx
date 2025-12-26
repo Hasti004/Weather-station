@@ -31,8 +31,7 @@ export default function ContactPage() {
                                     <div className="contact-icon">📧</div>
                                     <div className="contact-text">
                                         <h3>Email</h3>
-                                        <p>weather@prl.res.in</p>
-                                        <p>monitoring@prl.res.in</p>
+                                        <p>vishnu@prl.res.in</p>
                                     </div>
                                 </div>
 
@@ -40,8 +39,7 @@ export default function ContactPage() {
                                     <div className="contact-icon">📱</div>
                                     <div className="contact-text">
                                         <h3>Phone</h3>
-                                        <p>+91 79 2691 4000</p>
-                                        <p>+91 79 2691 4001</p>
+                                        <p></p>
                                     </div>
                                 </div>
 
@@ -81,17 +79,47 @@ export default function ContactPage() {
                                 <div className="station-info">
                                     <h3>🏙️ Ahmedabad</h3>
                                     <p>Main monitoring station</p>
-                                    <p>Coordinates: 23.0225°N, 72.5714°E</p>
+                                    <p>
+                                        Coordinates:{' '}
+                                        <a
+                                            href="https://www.google.com/maps?q=23.0225,72.5714"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            style={{ color: '#2563eb', textDecoration: 'underline', cursor: 'pointer' }}
+                                        >
+                                            23.0225°N, 72.5714°E
+                                        </a>
+                                    </p>
                                 </div>
                                 <div className="station-info">
                                     <h3>🏰 Udaipur</h3>
                                     <p>Rajasthan region station</p>
-                                    <p>Coordinates: 24.5854°N, 73.7125°E</p>
+                                    <p>
+                                        Coordinates:{' '}
+                                        <a
+                                            href="https://www.google.com/maps?q=24.5854,73.7125"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            style={{ color: '#2563eb', textDecoration: 'underline', cursor: 'pointer' }}
+                                        >
+                                            24.5854°N, 73.7125°E
+                                        </a>
+                                    </p>
                                 </div>
                                 <div className="station-info">
                                     <h3>⛰️ Mount Abu</h3>
                                     <p>Hill station monitoring</p>
-                                    <p>Coordinates: 24.5925°N, 72.7156°E</p>
+                                    <p>
+                                        Coordinates:{' '}
+                                        <a
+                                            href="https://www.google.com/maps?q=24.5925,72.7156"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            style={{ color: '#2563eb', textDecoration: 'underline', cursor: 'pointer' }}
+                                        >
+                                            24.5925°N, 72.7156°E
+                                        </a>
+                                    </p>
                                 </div>
                             </div>
                         </div>

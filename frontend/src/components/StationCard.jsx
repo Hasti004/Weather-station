@@ -48,10 +48,6 @@ export function StationCard({ id, name, tempC, condition, area, image, Icon, met
         <span aria-hidden="true">📍</span>
         <span>{area}</span>
       </div>
-      <div className="mini-chip">
-        <span aria-hidden="true">🌤️</span>
-        <span className="chip-temp">{tempC}°C</span>
-      </div>
     </Link>
   );
 }
